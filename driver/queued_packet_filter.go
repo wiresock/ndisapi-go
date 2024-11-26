@@ -9,8 +9,8 @@ import (
 	"log"
 	"sync"
 
-	A "github.com/amir-devman/ndisapi-go"
-	N "github.com/amir-devman/ndisapi-go/netlib"
+	A "github.com/wiresock/ndisapi-go"
+	N "github.com/wiresock/ndisapi-go/netlib"
 
 	"golang.org/x/sys/windows"
 )

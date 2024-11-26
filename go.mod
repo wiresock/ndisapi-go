@@ -1,4 +1,4 @@
-module github.com/amir-devman/ndisapi-go
+module github.com/wiresock/ndisapi-go
 
 go 1.23.2
 

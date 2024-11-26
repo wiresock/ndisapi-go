@@ -12,9 +12,9 @@ import (
 	"sync"
 	"unsafe"
 
-	A "github.com/amir-devman/ndisapi-go"
-	D "github.com/amir-devman/ndisapi-go/driver"
-	N "github.com/amir-devman/ndisapi-go/netlib"
+	A "github.com/wiresock/ndisapi-go"
+	D "github.com/wiresock/ndisapi-go/driver"
+	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
 type SupportedProtocols int

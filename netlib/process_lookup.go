@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	A "github.com/amir-devman/ndisapi-go"
+	A "github.com/wiresock/ndisapi-go"
 
 	"golang.org/x/sys/windows"
 )

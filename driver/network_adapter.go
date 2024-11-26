@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	A "github.com/amir-devman/ndisapi-go"
+	A "github.com/wiresock/ndisapi-go"
 )
 
 type NdisWanType int

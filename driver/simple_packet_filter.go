@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	A "github.com/amir-devman/ndisapi-go"
-	N "github.com/amir-devman/ndisapi-go/netlib"
+	A "github.com/wiresock/ndisapi-go"
+	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
 type SimplePacketFilter struct {

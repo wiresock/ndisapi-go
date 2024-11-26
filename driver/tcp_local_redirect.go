@@ -7,9 +7,9 @@ import (
 	"time"
 	"unsafe"
 
-	N "github.com/amir-devman/ndisapi-go/netlib"
+	N "github.com/wiresock/ndisapi-go/netlib"
 
-	A "github.com/amir-devman/ndisapi-go"
+	A "github.com/wiresock/ndisapi-go"
 )
 
 type timestampEndpoint struct {

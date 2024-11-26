@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	A "github.com/amir-devman/ndisapi-go"
-	P "github.com/amir-devman/ndisapi-go/proxy"
+	A "github.com/wiresock/ndisapi-go"
+	P "github.com/wiresock/ndisapi-go/proxy"
 )
 
 var (

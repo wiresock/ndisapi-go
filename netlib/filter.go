@@ -6,7 +6,7 @@ import (
 	"net"
 	"unsafe"
 
-	A "github.com/amir-devman/ndisapi-go"
+	A "github.com/wiresock/ndisapi-go"
 )
 
 type MultiRequestBuffer [unsafe.Sizeof(A.EtherMultiRequest{}) + unsafe.Sizeof(A.EthernetPacket{})*(A.MaximumPacketBlock-1)]byte
