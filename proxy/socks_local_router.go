@@ -17,6 +17,7 @@ import (
 	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
+// SupportedProtocols defines the supported protocols for the proxy.
 type SupportedProtocols int
 
 const (
@@ -25,32 +26,36 @@ const (
 	Both
 )
 
+// SocksLocalRouter handles the routing of SOCKS traffic locally.
 type SocksLocalRouter struct {
-	sync.Mutex
+	sync.Mutex // Mutex to synchronize access to shared resources.
+	*A.NdisApi // API instance for interacting with the NDIS API.
 
-	api *A.NdisApi
+	wg sync.WaitGroup // WaitGroup to manage goroutines.
 
-	tcpMapper sync.Map
+	tcpMapper sync.Map // Map to store TCP port mappings.
 
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx          context.Context // Context and cancel function for managing the router's lifecycle.
+	cancel       context.CancelFunc
+	proxyServers []*TransparentProxy // List of proxy servers managed by this router.
+	nameToProxy  map[string]int      // Map to associate process names with proxy indices.
+	ifIndex      uint32              // Index of the network interface used.
 
-	proxyServers []*TransparentProxy
-	nameToProxy  map[string]int
-	ifIndex      uint32
+	process *N.ProcessLookup // Process lookup instance.
 
-	tcpRedirect  *D.TcpLocalRedirector
-	process      *N.ProcessLookup
-	filter       *D.QueuedPacketFilter
-	staticFilter *D.StaticFilter
+	tcpRedirect  *D.TcpLocalRedirector // TCP redirector instance.
+	filter       *D.QueuedPacketFilter // Packet filter instance.
+	staticFilter *D.StaticFilter       // Static filter instance.
 
-	isActive bool
+	isActive bool // Boolean to track the active status of the router.
 }
 
+// NewSocksLocalRouter creates a new instance of SocksLocalRouter.
 func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
+	// Initialize TCP redirector
 	tcpRedirect := D.NewTcpLocalRedirector()
 
+	// Get adapter information
 	adapters, err := api.GetTcpipBoundAdaptersInfo()
 	if err != nil {
 		return nil, err
@@ -58,9 +63,11 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 
 	var selectedAdapter uint32
 
+	// Get network interfaces
 	interfaces, _ := net.Interfaces()
 	firstInterface := interfaces[0]
 
+	// Select the first interface
 	for i := range adapters.AdapterCount {
 		friendlyName := api.ConvertWindows2000AdapterName(string(adapters.AdapterNameList[i][:]))
 		if firstInterface.Name == friendlyName {
@@ -70,16 +77,19 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 		}
 	}
 
+	// Initialize process lookup
 	processLookup, err := N.NewProcessLookup()
 	if err != nil {
 		fmt.Println("Error creating process lookup:", err)
 		return nil, err
 	}
 
+	// Create context with cancel function
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Initialize SocksLocalRouter
 	socksLocalRouter := &SocksLocalRouter{
-		api: api,
+		NdisApi: api,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -93,6 +103,7 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 		isActive: false,
 	}
 
+	// Create packet filter
 	filter, err := D.NewQueuedPacketFilter(api, adapters, nil, func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction {
 		etherHeaderSize := int(unsafe.Sizeof(A.EtherHeader{}))
 		if len(buffer.Buffer) < etherHeaderSize {
@@ -135,7 +146,7 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 				if socksLocalRouter.tcpRedirect.ProcessClientToServerPacket(buffer, A.Htons(port)) {
 					return A.FilterActionRedirect
 				}
-			} else if socksLocalRouter.IsTcpProxyPort(A.Ntohs(tcpHeader.SourcePort)) {
+			} else if socksLocalRouter.IsTCPProxyPort(A.Ntohs(tcpHeader.SourcePort)) {
 				if socksLocalRouter.tcpRedirect.ProcessServerToClientPacket(buffer) {
 					return A.FilterActionRedirect
 				}
@@ -148,11 +159,12 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 	socksLocalRouter.filter = filter
 
 	// Set up ICMP filter to pass all ICMP traffic
-	icmpFilter := N.NewFilter()
+	icmpFilter := D.NewFilter()
 	icmpFilter.SetAction(A.FilterActionPass)
 	icmpFilter.SetDirection(A.PacketDirectionBoth)
 	icmpFilter.SetProtocol(A.IPPROTO_ICMP)
 
+	// Get static filter and add ICMP filter
 	staticFilter, err := D.GetStaticFilter(api, A.FilterActionRedirect)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get static filter: %v", err)
@@ -161,6 +173,7 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 	// Add the ICMP filter to the static filters list and apply all filters
 	staticFilter.AddFilter(icmpFilter)
 
+	// Apply static filter
 	if err := staticFilter.Apply(); err != nil {
 		return nil, fmt.Errorf("failed to apply static filter: %v", err)
 	}
@@ -170,84 +183,91 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 	return socksLocalRouter, nil
 }
 
-func (S *SocksLocalRouter) Close() error {
-	S.Stop()
-	S.staticFilter.Reset()
+// Close stops the router and resets the static filter.
+func (s *SocksLocalRouter) Close() error {
+	s.Stop()
+	s.staticFilter.Reset()
 	return nil
 }
 
-func (S *SocksLocalRouter) Start() error {
-	S.Lock()
-	defer S.Unlock()
+// Start activates the router and its proxy servers.
+func (s *SocksLocalRouter) Start() error {
+	s.Lock()
+	defer s.Unlock()
 
-	if S.isActive {
+	if s.isActive {
 		return fmt.Errorf("SocksLocalRouter is already active")
 	}
 
-	for _, server := range S.proxyServers {
-		S.wg.Add(1)
+	for _, server := range s.proxyServers {
+		s.wg.Add(1)
 		go func(server *TransparentProxy) {
-			defer S.wg.Done()
-			if err := server.Start(S.ctx); err != nil {
+			defer s.wg.Done()
+			if err := server.Start(s.ctx); err != nil {
 				log.Printf("failed to start proxy server: %v", err)
 			}
 		}(server)
 	}
 
-	if err := S.filter.StartFilter(int(S.ifIndex)); err != nil {
+	if err := s.filter.StartFilter(int(s.ifIndex)); err != nil {
 		return fmt.Errorf("Failed to start filter: %v", err)
 	}
 
-	S.isActive = true
+	s.isActive = true
 	return nil
 }
 
-func (S *SocksLocalRouter) Stop() error {
-	S.Lock()
-	defer S.Unlock()
+// Stop deactivates the router and its proxy servers.
+func (s *SocksLocalRouter) Stop() error {
+	s.Lock()
+	defer s.Unlock()
 
-	if !S.isActive {
+	if !s.isActive {
 		return fmt.Errorf("SocksLocalRouter is already stopped")
 	}
 
-	S.filter.StopFilter()
+	s.filter.StopFilter()
 
-	for _, server := range S.proxyServers {
+	for _, server := range s.proxyServers {
 		server.Stop()
 	}
 
-	S.cancel()
-	S.wg.Wait()
+	s.cancel()
+	s.wg.Wait()
 
-	S.isActive = false
+	s.isActive = false
 	return nil
 }
 
-func (S *SocksLocalRouter) IsDriverLoaded() bool {
-	return S.api.IsDriverLoaded()
+// IsDriverLoaded checks if the NDIS driver is loaded.
+func (s *SocksLocalRouter) IsDriverLoaded() bool {
+	return s.IsDriverLoaded()
 }
 
-func (S *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedProtocols, start bool, login *string, password *string) (int, error) {
+// AddSocks5Proxy adds a new SOCKS5 proxy to the router.
+func (s *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedProtocols, start bool, login *string, password *string) (int, error) {
 	endpointIP, endpointPort, err := parseEndpoint(*endpoint)
 	if err != nil {
 		return -1, fmt.Errorf("failed to parse endpoint: %v", err)
 	}
 
-	socks5TcpProxyFilterOut := N.NewFilter().
+	// Create filters for the SOCKS5 proxy
+	socks5TcpProxyFilterOut := D.NewFilter().
 		SetDestAddress(endpointIP.IP).
 		SetDestPort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
 		SetAction(A.FilterActionPass).
 		SetDirection(A.PacketDirectionOut).
 		SetProtocol(A.IPPROTO_TCP)
 
-	socks5TcpProxyFilterIn := N.NewFilter().
+	socks5TcpProxyFilterIn := D.NewFilter().
 		SetSourceAddress(endpointIP.IP).
 		SetSourcePort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
 		SetAction(A.FilterActionPass).
 		SetDirection(A.PacketDirectionIn).
 		SetProtocol(A.IPPROTO_TCP)
 
-	staticFilter, err := D.GetStaticFilter(S.api, A.FilterActionRedirect)
+	// Get static filter and add SOCKS5 filters
+	staticFilter, err := D.GetStaticFilter(s.NdisApi, A.FilterActionRedirect)
 	if err != nil {
 		return -1, fmt.Errorf("failed to get static filter: %v", err)
 	}
@@ -255,11 +275,13 @@ func (S *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedPr
 	staticFilter.AddFilter(socks5TcpProxyFilterOut)
 	staticFilter.AddFilter(socks5TcpProxyFilterIn)
 
+	// Apply static filter
 	if err := staticFilter.Apply(); err != nil {
 		return -1, fmt.Errorf("failed to apply static filter: %v", err)
 	}
 
-	transparentProxy := NewTransparentProxy("0.0.0.0:0", *endpoint, *login, *password, func(conn net.Conn) (string, error) {
+	// Create and add new transparent proxy
+	transparentProxy := NewTransparentProxy(*endpoint, *login, *password, func(conn net.Conn) (string, error) {
 		var remoteAddress net.IP
 
 		address := strings.Split(conn.RemoteAddr().String(), ":")
@@ -270,8 +292,8 @@ func (S *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedPr
 			return "", err
 		}
 
-		if value, ok := S.tcpMapper.Load(int(port)); ok {
-			S.tcpMapper.Delete(int(port))
+		if value, ok := s.tcpMapper.Load(int(port)); ok {
+			s.tcpMapper.Delete(int(port))
 
 			return fmt.Sprintf("%s:%d", remoteAddress.String(), value.(uint16)), nil
 		}
@@ -279,31 +301,33 @@ func (S *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedPr
 		return "", fmt.Errorf("could not find original destination")
 	})
 
-	S.proxyServers = append(S.proxyServers, transparentProxy)
+	s.proxyServers = append(s.proxyServers, transparentProxy)
 
-	return len(S.proxyServers) - 1, nil
+	return len(s.proxyServers) - 1, nil
 }
 
-func (S *SocksLocalRouter) AssociateProcessNameToProxy(processName string, proxyID int) error {
-	S.Lock()
-	defer S.Unlock()
+// AssociateProcessNameToProxy associates a process name with a proxy ID.
+func (s *SocksLocalRouter) AssociateProcessNameToProxy(processName string, proxyID int) error {
+	s.Lock()
+	defer s.Unlock()
 
-	if proxyID >= len(S.proxyServers) {
+	if proxyID >= len(s.proxyServers) {
 		return fmt.Errorf("AssociateProcessNameToProxy: proxy index is out of range")
 	}
-	S.nameToProxy[processName] = proxyID
+	s.nameToProxy[processName] = proxyID
 
 	return nil
 }
 
-func (S *SocksLocalRouter) GetProxyPortTCP(process *N.NetworkProcess) uint16 {
-	S.Lock()
-	defer S.Unlock()
+// GetProxyPortTCP retrieves the TCP proxy port for a given process.
+func (s *SocksLocalRouter) GetProxyPortTCP(process *N.NetworkProcess) uint16 {
+	s.Lock()
+	defer s.Unlock()
 
-	for name, proxyID := range S.nameToProxy {
+	for name, proxyID := range s.nameToProxy {
 		if strings.Contains(process.PathName, name) {
-			if proxyID < len(S.proxyServers) && S.proxyServers[proxyID] != nil {
-				return S.proxyServers[proxyID].GetLocalProxyPort()
+			if proxyID < len(s.proxyServers) && s.proxyServers[proxyID] != nil {
+				return s.proxyServers[proxyID].GetLocalProxyPort()
 			}
 		}
 	}
@@ -311,11 +335,12 @@ func (S *SocksLocalRouter) GetProxyPortTCP(process *N.NetworkProcess) uint16 {
 	return 0
 }
 
-func (S *SocksLocalRouter) IsTcpProxyPort(port uint16) bool {
-	S.Lock()
-	defer S.Unlock()
+// IsTCPProxyPort checks if a given port is used by any TCP proxy.
+func (s *SocksLocalRouter) IsTCPProxyPort(port uint16) bool {
+	s.Lock()
+	defer s.Unlock()
 
-	for _, server := range S.proxyServers {
+	for _, server := range s.proxyServers {
 		if server.GetLocalProxyPort() == port {
 			return true
 		}
@@ -323,6 +348,7 @@ func (S *SocksLocalRouter) IsTcpProxyPort(port uint16) bool {
 	return false
 }
 
+// parseEndpoint parses an endpoint string into an IP address and port.
 func parseEndpoint(endpoint string) (*net.IPAddr, uint16, error) {
 	pos := strings.LastIndex(endpoint, ":")
 	if pos == -1 {

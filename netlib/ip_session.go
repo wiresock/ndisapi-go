@@ -8,6 +8,7 @@ import (
 	"net"
 )
 
+// IPSession represents an IPv4 TCP/UDP session.
 type IPSession struct {
 	LocalAddr  net.IP
 	LocalPort  uint16
@@ -15,6 +16,7 @@ type IPSession struct {
 	RemotePort uint16
 }
 
+// NewIPSession constructs an object from provided local and remote IP addresses and ports.
 func NewIPSession(localAddr net.IP, remoteAddr net.IP, localPort uint16, remotePort uint16) IPSession {
 	return IPSession{
 		LocalAddr:  localAddr,
@@ -24,6 +26,7 @@ func NewIPSession(localAddr net.IP, remoteAddr net.IP, localPort uint16, remoteP
 	}
 }
 
+// Equal checks if two IPSession objects are equal.
 func (s IPSession) Equal(other IPSession) bool {
 	return s.LocalAddr.Equal(other.LocalAddr) &&
 		s.LocalPort == other.LocalPort &&
@@ -31,6 +34,7 @@ func (s IPSession) Equal(other IPSession) bool {
 		s.RemotePort == other.RemotePort
 }
 
+// Hash generates a hash for the IPSession object.
 func (s IPSession) Hash() (uint64, error) {
 	h := fnv.New64a()
 

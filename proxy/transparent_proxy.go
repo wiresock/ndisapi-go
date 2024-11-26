@@ -15,8 +15,8 @@ import (
 
 type queryRemotePeer func(conn net.Conn) (string, error)
 
+// TransparentProxy represents a transparent proxy server.
 type TransparentProxy struct {
-	listenAddr    string
 	socksEndpoint string
 	socksUsername string
 	socksPassword string
@@ -26,9 +26,9 @@ type TransparentProxy struct {
 	queryRemotePeer queryRemotePeer
 }
 
-func NewTransparentProxy(listenAddr, socksEndpoint string, socksUsername, socksPassword string, queryRemotePeer queryRemotePeer) *TransparentProxy {
+// NewTransparentProxy creates a new instance of TransparentProxy.
+func NewTransparentProxy(socksEndpoint string, socksUsername, socksPassword string, queryRemotePeer queryRemotePeer) *TransparentProxy {
 	return &TransparentProxy{
-		listenAddr:      listenAddr,
 		socksEndpoint:   socksEndpoint,
 		socksUsername:   socksUsername,
 		socksPassword:   socksPassword,
@@ -36,9 +36,10 @@ func NewTransparentProxy(listenAddr, socksEndpoint string, socksUsername, socksP
 	}
 }
 
+// Start starts the transparent proxy server.
 func (tp *TransparentProxy) Start(ctx context.Context) error {
 	var err error
-	tp.listener, err = net.Listen("tcp", tp.listenAddr)
+	tp.listener, err = net.Listen("tcp", "0")
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %v", err)
 	}
@@ -64,6 +65,7 @@ func (tp *TransparentProxy) Start(ctx context.Context) error {
 	}
 }
 
+// GetLocalProxyPort returns the local proxy port.
 func (tp *TransparentProxy) GetLocalProxyPort() uint16 {
 	if tp.listener == nil {
 		return 0
@@ -72,6 +74,7 @@ func (tp *TransparentProxy) GetLocalProxyPort() uint16 {
 	return uint16(addr.Port)
 }
 
+// handleConnection handles a new client connection that is redirected.
 func (tp *TransparentProxy) handleConnection(clientConn net.Conn) {
 	defer clientConn.Close()
 
@@ -83,11 +86,7 @@ func (tp *TransparentProxy) handleConnection(clientConn net.Conn) {
 	}
 
 	var remoteConn net.Conn
-	if tp.socksEndpoint != "" {
-		remoteConn, err = tp.connectViaSocks5(dst)
-	} else {
-		remoteConn, err = net.Dial("tcp", dst)
-	}
+	remoteConn, err = tp.connectViaSocks5(dst)
 	if err != nil {
 		log.Printf("failed to connect to remote host: %v", err)
 		return
@@ -104,6 +103,7 @@ func (tp *TransparentProxy) handleConnection(clientConn net.Conn) {
 	wg.Wait()
 }
 
+// connectViaSocks5 connects to the remote host via SOCKS5 proxy.
 func (tp *TransparentProxy) connectViaSocks5(dst string) (net.Conn, error) {
 	auth := &proxy.Auth{
 		User:     tp.socksUsername,
@@ -118,11 +118,13 @@ func (tp *TransparentProxy) connectViaSocks5(dst string) (net.Conn, error) {
 	return dialer.Dial("tcp", dst)
 }
 
+// forwardData forwards data between source and destination connections.
 func (tp *TransparentProxy) forwardData(src, dst net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 	io.Copy(dst, src)
 }
 
+// Stop stops the transparent proxy server.
 func (tp *TransparentProxy) Stop() {
 	if tp.cancel != nil {
 		tp.cancel()

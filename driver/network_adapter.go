@@ -33,6 +33,7 @@ type NetworkAdapter struct {
 	packetEvent *A.SafeEvent
 }
 
+// NewNetworkAdapter constructs a NetworkAdapter instance using the provided parameters.
 func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddress, internalName, friendlyName string, medium uint32, mtu uint16) (*NetworkAdapter, error) {
 	adapter := &NetworkAdapter{
 		API:          api,
@@ -54,6 +55,7 @@ func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddres
 	}
 	adapter.packetEvent = A.NewSafeEvent(eventHandle)
 
+	// Initialize NDISWAN type
 	if api.IsNdiswanIP(internalName) {
 		adapter.NdisWanType = NdisWanIP
 	} else if api.IsNdiswanIPv6(internalName) {
@@ -67,6 +69,7 @@ func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddres
 	return adapter, nil
 }
 
+// WaitEvent waits for the network interface event to be signaled.
 func (na *NetworkAdapter) WaitEvent(timeout uint32) (uint32, error) {
 	if na.packetEvent == nil {
 		return 0, fmt.Errorf("event is not initialized")
@@ -74,32 +77,40 @@ func (na *NetworkAdapter) WaitEvent(timeout uint32) (uint32, error) {
 	return na.packetEvent.Wait(timeout)
 }
 
+// SignalEvent signals the packet event.
 func (na *NetworkAdapter) SignalEvent() error {
 	return na.packetEvent.Signal()
 }
 
+// ResetEvent resets the packet event.
 func (na *NetworkAdapter) ResetEvent() error {
 	return na.packetEvent.Reset()
 }
 
+// SetPacketEvent submits the packet event into the driver.
 func (na *NetworkAdapter) SetPacketEvent() error {
 	return na.API.SetPacketEvent(na.CurrentMode.AdapterHandle, na.packetEvent.Handle)
 }
 
+// Release stops filtering the network interface and tries to restore its original state.
 func (na *NetworkAdapter) Release() {
 	na.SignalEvent()
 
+	// Reset adapter mode and flush the packet queue
 	na.CurrentMode.Flags = 0
 
 	na.API.SetAdapterMode(&na.CurrentMode)
 	na.API.FlushAdapterPacketQueue(na.CurrentMode.AdapterHandle)
 }
 
+// SetMode sets the filtering mode for the network interface.
 func (na *NetworkAdapter) SetMode(flags uint32) error {
 	na.CurrentMode.Flags = flags
 
 	return na.API.SetAdapterMode(&na.CurrentMode)
 }
+
+// GetMode returns the current adapter mode.
 func (na *NetworkAdapter) GetMode() A.AdapterMode {
 	adapterMode := &A.AdapterMode{}
 	err := na.API.GetAdapterMode(adapterMode)
@@ -110,6 +121,7 @@ func (na *NetworkAdapter) GetMode() A.AdapterMode {
 	return *adapterMode
 }
 
+// GetAdapter returns the network interface handle value.
 func (na *NetworkAdapter) GetAdapter() A.Handle {
 	return na.CurrentMode.AdapterHandle
 }

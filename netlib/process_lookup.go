@@ -13,12 +13,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// NetworkProcess represents a networking application.
 type NetworkProcess struct {
 	ID       uint32
 	Name     string
 	PathName string
 }
 
+// NewNetworkProcess constructs an object instance from provided process ID, name, and path.
 func NewNetworkProcess(id uint32, name, path string) *NetworkProcess {
 	return &NetworkProcess{
 		ID:       id,
@@ -27,11 +29,13 @@ func NewNetworkProcess(id uint32, name, path string) *NetworkProcess {
 	}
 }
 
+// ProcessLookup utilizes IP Helper API to match TCP network packets to local processes.
 type ProcessLookup struct {
 	tcpToApp       sync.Map
 	defaultProcess *NetworkProcess
 }
 
+// NewProcessLookup initializes the current state of TCP connections.
 func NewProcessLookup() (*ProcessLookup, error) {
 	instance := &ProcessLookup{
 		tcpToApp:       sync.Map{},
@@ -47,6 +51,7 @@ func NewProcessLookup() (*ProcessLookup, error) {
 	return instance, nil
 }
 
+// LookupProcessForTcp searches for a process by provided TCP session information.
 func (pl *ProcessLookup) LookupProcessForTcp(session IPSession) (*NetworkProcess, error) {
 	sessionHash, err := session.Hash()
 	if err != nil {
@@ -60,6 +65,7 @@ func (pl *ProcessLookup) LookupProcessForTcp(session IPSession) (*NetworkProcess
 	return pl.defaultProcess, nil
 }
 
+// Actualize updates the TCP hash table.
 func (pl *ProcessLookup) Actualize(tcp, udp bool) error {
 	if tcp {
 		err := pl.initializeTcpTable()
@@ -71,6 +77,7 @@ func (pl *ProcessLookup) Actualize(tcp, udp bool) error {
 	return nil
 }
 
+// ResolveProcessForTcp resolves the process for a given TCP session.
 func (pl *ProcessLookup) ResolveProcessForTcp(ipHeader *A.IPHeader, tcpHeader *A.TCPHeader) (*NetworkProcess, error) {
 	session := IPSession{
 		LocalAddr:  net.IP(ipHeader.SourceAddr[:]),
@@ -100,6 +107,7 @@ func (pl *ProcessLookup) ResolveProcessForTcp(ipHeader *A.IPHeader, tcpHeader *A
 	return process, nil
 }
 
+// initializeTcpTable initializes or updates the TCP hashtable.
 func (pl *ProcessLookup) initializeTcpTable() error {
 	var (
 		table PMIB_TCPTABLE_OWNER_MODULE
@@ -158,6 +166,7 @@ func (pl *ProcessLookup) initializeTcpTable() error {
 	return nil
 }
 
+// processTcpEntryV4 processes a TCP table entry for IPv4 and retrieves the owner module information.
 func processTcpEntryV4(tableEntry *MIB_TCPROW_OWNER_MODULE) *NetworkProcess {
 	var (
 		size       uint32
@@ -196,10 +205,12 @@ func processTcpEntryV4(tableEntry *MIB_TCPROW_OWNER_MODULE) *NetworkProcess {
 	return processPtr
 }
 
+// parseIPv4 converts a uint32 IP address to net.IP.
 func parseIPv4(addr uint32) net.IP {
 	return net.IPv4(byte(addr), byte(addr>>8), byte(addr>>16), byte(addr>>24))
 }
 
+// parseIPv6 converts a 16-byte array IP address to net.IP.
 func parseIPv6(addr [16]byte) net.IP {
 	var ret [16]byte
 	for i := 0; i < 16; i++ {

@@ -18,7 +18,7 @@ This command will expose a SOCKS5 proxy on localhost 127.0.0.1:8080.
 
 *Note: run all the commands from the repo root directory*
 
-2. Create `./cmd/socks5/config.json`:
+2. Create `./examples/socks5/config.json`:
 ```json
 {
   "proxies": [
@@ -26,7 +26,7 @@ This command will expose a SOCKS5 proxy on localhost 127.0.0.1:8080.
       "appNames": [
         "firefox"
       ],
-      "socks5ProxyEndpoint": "127.0.0.1:1080",
+      "socks5ProxyEndpoint": "127.0.0.1:8080",
       "username": "",
       "password": "",
       "supportedProtocols": [
@@ -38,7 +38,7 @@ This command will expose a SOCKS5 proxy on localhost 127.0.0.1:8080.
 ```
 
 ```
-go run ./cmd/socks5/main.go
+go run ./examples/socks5/main.go
 ```
 
 After completing these steps, all traffic from the specified application (in this case, the Firefox browser) will be redirected through the transparent local proxy and then through the SOCKS5 proxy exposed by the SSH command at 127.0.0.1:8080.

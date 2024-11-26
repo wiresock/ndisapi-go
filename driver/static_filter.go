@@ -17,13 +17,15 @@ type StaticFilter struct {
 	defaultAction     A.FilterAction
 	networkInterfaces []*NetworkAdapter
 
-	filters []*N.Filter
+	filters []*Filter
 }
 
 // singleton StaticFilter
 var instance *StaticFilter
 var once sync.Once
 
+// GetStaticFilter returns a singleton instance of StaticFilter with the provided NdisApi and default action.
+// It initializes network interfaces if not already initialized.
 func GetStaticFilter(api *A.NdisApi, action A.FilterAction) (*StaticFilter, error) {
 	once.Do(func() {
 		instance = &StaticFilter{
@@ -32,7 +34,7 @@ func GetStaticFilter(api *A.NdisApi, action A.FilterAction) (*StaticFilter, erro
 			defaultAction:     action,
 			networkInterfaces: make([]*NetworkAdapter, 0),
 
-			filters: []*N.Filter{},
+			filters: []*Filter{},
 		}
 	})
 
@@ -44,12 +46,13 @@ func GetStaticFilter(api *A.NdisApi, action A.FilterAction) (*StaticFilter, erro
 	return instance, nil
 }
 
-func (f *StaticFilter) AddFilter(filter *N.Filter) *StaticFilter {
+// AddFilter adds a new filter to the StaticFilter instance.
+func (f *StaticFilter) AddFilter(filter *Filter) *StaticFilter {
 	f.filters = append(f.filters, filter)
 	return f
 }
 
-// Apply the filters
+// Apply applies the configured filters to the network interfaces.
 func (f *StaticFilter) Apply() error {
 	// Allocate table filters
 	tableBuffer := make([]byte, int(unsafe.Sizeof(A.StaticFilterTable{}))+(len(f.filters))*int(unsafe.Sizeof(A.StaticFilterEntry{})))
@@ -94,13 +97,14 @@ func (f *StaticFilter) Apply() error {
 	return nil
 }
 
-// Reset resets the filter table and re-initializes interfaces
+// Reset resets the filter table and re-initializes network interfaces.
 func (f *StaticFilter) Reset() {
 	_ = f.SetPacketFilterTable(nil)
 	f.networkInterfaces = nil
 	_ = f.initializeNetworkInterfaces()
 }
 
+// initializeNetworkInterfaces initializes the network interfaces bound to TCP/IP.
 func (f *StaticFilter) initializeNetworkInterfaces() error {
 	adapters, err := f.GetTcpipBoundAdaptersInfo()
 	if err != nil {
@@ -126,7 +130,8 @@ func (f *StaticFilter) initializeNetworkInterfaces() error {
 	return nil
 }
 
-func (f *StaticFilter) toStaticFilter(filter *N.Filter, staticFilter *A.StaticFilterEntry) {
+// toStaticFilter converts a Filter instance to a StaticFilterEntry.
+func (f *StaticFilter) toStaticFilter(filter *Filter, staticFilter *A.StaticFilterEntry) {
 	if index := filter.GetNetworkInterfaceIndex(); index != nil {
 		staticFilter.Adapter = f.networkInterfaces[*index].GetAdapter()
 	} else {

@@ -12,7 +12,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	A "github.com/wiresock/ndisapi-go"
-	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
 type SimplePacketFilter struct {
@@ -22,15 +21,15 @@ type SimplePacketFilter struct {
 
 	filterIncomingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterOutgoingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
-	filterState          N.FilterState
+	filterState          FilterState
 	networkInterfaces    []*NetworkAdapter
 
 	adapter      int
 	packetBuffer []A.IntermediateBuffer
 
-	readRequest         *N.MultiRequestBuffer
-	writeAdapterRequest *N.MultiRequestBuffer
-	writeMstcpRequest   *N.MultiRequestBuffer
+	readRequest         *MultiRequestBuffer
+	writeAdapterRequest *MultiRequestBuffer
+	writeMstcpRequest   *MultiRequestBuffer
 
 	wg     sync.WaitGroup
 	ctx    context.Context
@@ -44,7 +43,7 @@ func NewSimplePacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 
 		filterIncomingPacket: in,
 		filterOutgoingPacket: out,
-		filterState:          N.Stopped,
+		filterState:          FilterStateStopped,
 	}
 
 	err := filter.initializeNetworkInterfaces()
@@ -58,9 +57,9 @@ func NewSimplePacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 func (f *SimplePacketFilter) initFilter() error {
 	f.packetBuffer = make([]A.IntermediateBuffer, A.MaximumPacketBlock)
 
-	f.readRequest = &N.MultiRequestBuffer{}
-	f.writeAdapterRequest = &N.MultiRequestBuffer{}
-	f.writeMstcpRequest = &N.MultiRequestBuffer{}
+	f.readRequest = &MultiRequestBuffer{}
+	f.writeAdapterRequest = &MultiRequestBuffer{}
+	f.writeMstcpRequest = &MultiRequestBuffer{}
 
 	readRequest := (*A.EtherMultiRequest)(unsafe.Pointer(f.readRequest))
 	writeAdapterRequest := (*A.EtherMultiRequest)(unsafe.Pointer(f.writeAdapterRequest))
@@ -122,7 +121,7 @@ func (f *SimplePacketFilter) ReleaseFilter() {
 }
 
 func (f *SimplePacketFilter) Reconfigure() error {
-	if f.filterState != N.Stopped {
+	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
 	}
 
@@ -135,11 +134,11 @@ func (f *SimplePacketFilter) Reconfigure() error {
 }
 
 func (f *SimplePacketFilter) StartFilter(adapterIdx int) error {
-	if f.filterState != N.Stopped {
+	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
 	}
 
-	f.filterState = N.Starting
+	f.filterState = FilterStateStarting
 	f.adapter = adapterIdx
 
 	f.ctx, f.cancel = context.WithCancel(context.Background())
@@ -148,7 +147,7 @@ func (f *SimplePacketFilter) StartFilter(adapterIdx int) error {
 		return err
 	}
 
-	f.filterState = N.Starting
+	f.filterState = FilterStateStarting
 
 	// Start the working thread
 	f.wg.Add(1)
@@ -158,16 +157,16 @@ func (f *SimplePacketFilter) StartFilter(adapterIdx int) error {
 }
 
 func (f *SimplePacketFilter) StopFilter() error {
-	if f.filterState != N.Running {
+	if f.filterState != FilterStateRunning {
 		return errors.New("filter is not running")
 	}
 
-	f.filterState = N.Stopping
+	f.filterState = FilterStateStopping
 
 	f.cancel()
 
 	f.wg.Wait()
-	f.filterState = N.Stopped
+	f.filterState = FilterStateStopped
 
 	f.ReleaseFilter()
 
@@ -177,7 +176,7 @@ func (f *SimplePacketFilter) StopFilter() error {
 func (f *SimplePacketFilter) filterWorkingThread() {
 	defer f.wg.Done()
 
-	f.filterState = N.Running
+	f.filterState = FilterStateRunning
 
 	for {
 		select {
@@ -188,7 +187,7 @@ func (f *SimplePacketFilter) filterWorkingThread() {
 			writeAdapterRequest := (*A.EtherMultiRequest)(unsafe.Pointer(f.writeAdapterRequest))
 			writeMstcpRequest := (*A.EtherMultiRequest)(unsafe.Pointer(f.writeMstcpRequest))
 
-			for f.filterState == N.Running {
+			for f.filterState == FilterStateRunning {
 				_, err := f.networkInterfaces[f.adapter].WaitEvent(windows.INFINITE)
 				if err != nil {
 					f.ctx.Done()
@@ -201,7 +200,7 @@ func (f *SimplePacketFilter) filterWorkingThread() {
 					return
 				}
 
-				for f.filterState == N.Running {
+				for f.filterState == FilterStateRunning {
 					if f.ReadPackets(readRequest) {
 						break
 					}
@@ -271,6 +270,6 @@ func (f *SimplePacketFilter) GetInterfaceHWList() []MacAddress {
 	return names
 }
 
-func (f *SimplePacketFilter) GetFilterState() N.FilterState {
+func (f *SimplePacketFilter) GetFilterState() FilterState {
 	return f.filterState
 }

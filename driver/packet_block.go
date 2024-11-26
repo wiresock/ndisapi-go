@@ -8,8 +8,10 @@ import (
 	A "github.com/wiresock/ndisapi-go"
 )
 
+// RequestStorageType represents the storage type for requests.
 type RequestStorageType [unsafe.Sizeof(A.EtherMultiRequest{}) + unsafe.Sizeof(A.EthernetPacket{})*(A.MaximumPacketBlock-1)]byte
 
+// PacketBlock represents a block of packets.
 type PacketBlock struct {
 	packetBuffer        [A.MaximumPacketBlock]A.IntermediateBuffer
 	readRequest         *RequestStorageType
@@ -17,6 +19,7 @@ type PacketBlock struct {
 	writeMstcpRequest   *RequestStorageType
 }
 
+// NewPacketBlock creates a new PacketBlock.
 func NewPacketBlock(adapter A.Handle) *PacketBlock {
 	packetBlock := &PacketBlock{
 		packetBuffer: [A.MaximumPacketBlock]A.IntermediateBuffer{},
@@ -44,14 +47,17 @@ func NewPacketBlock(adapter A.Handle) *PacketBlock {
 	return packetBlock
 }
 
+// GetReadRequest returns the read request.
 func (p *PacketBlock) GetReadRequest() *A.EtherMultiRequest {
 	return (*A.EtherMultiRequest)(unsafe.Pointer(p.readRequest))
 }
 
+// GetWriteAdapterRequest returns the write adapter request.
 func (p *PacketBlock) GetWriteAdapterRequest() *A.EtherMultiRequest {
 	return (*A.EtherMultiRequest)(unsafe.Pointer(p.writeAdapterRequest))
 }
 
+// GetWriteMstcpRequest returns the write MSTCP request.
 func (p *PacketBlock) GetWriteMstcpRequest() *A.EtherMultiRequest {
 	return (*A.EtherMultiRequest)(unsafe.Pointer(p.writeMstcpRequest))
 }

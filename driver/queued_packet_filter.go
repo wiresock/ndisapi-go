@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	A "github.com/wiresock/ndisapi-go"
-	N "github.com/wiresock/ndisapi-go/netlib"
 
 	"golang.org/x/sys/windows"
 )
@@ -22,7 +21,7 @@ type QueuedPacketFilter struct {
 
 	filterIncomingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterOutgoingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
-	filterState          N.FilterState
+	filterState          FilterState
 	networkInterfaces    []*NetworkAdapter
 	adapter              int
 
@@ -35,6 +34,7 @@ type QueuedPacketFilter struct {
 	packetWriteAdapterChan chan *PacketBlock
 }
 
+// NewQueuedPacketFilter constructs a QueuedPacketFilter.
 func NewQueuedPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction) (*QueuedPacketFilter, error) {
 	filter := &QueuedPacketFilter{
 		NdisApi:  api,
@@ -42,7 +42,7 @@ func NewQueuedPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 
 		filterIncomingPacket: in,
 		filterOutgoingPacket: out,
-		filterState:          N.Stopped,
+		filterState:          FilterStateStopped,
 		adapter:              0,
 
 		packetReadChan:         make(chan *PacketBlock, A.MaximumPacketBlock),
@@ -59,6 +59,7 @@ func NewQueuedPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 	return filter, nil
 }
 
+// initFilter initializes the filter and associated data structures required for packet filtering.
 func (f *QueuedPacketFilter) initFilter() error {
 	for i := 0; i < A.MaximumPacketBlock; i++ {
 		packetBlock := NewPacketBlock(f.networkInterfaces[f.adapter].GetAdapter())
@@ -89,10 +90,9 @@ func (f *QueuedPacketFilter) initFilter() error {
 	return nil
 }
 
+// ReleaseFilter releases the filter and associated data structures.
 func (f *QueuedPacketFilter) ReleaseFilter() {
 	f.networkInterfaces[f.adapter].Release()
-
-	// TODO: need more review
 
 	// Clear all queues
 	for len(f.packetReadChan) > 0 {
@@ -112,8 +112,9 @@ func (f *QueuedPacketFilter) ReleaseFilter() {
 	}
 }
 
+// Reconfigure updates available network interfaces. Should be called when the filter is inactive.
 func (f *QueuedPacketFilter) Reconfigure() error {
-	if f.filterState != N.Stopped {
+	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
 	}
 
@@ -125,16 +126,17 @@ func (f *QueuedPacketFilter) Reconfigure() error {
 	return nil
 }
 
+// StartFilter starts packet filtering.
 func (f *QueuedPacketFilter) StartFilter(adapterIdx int) error {
-	if f.filterState != N.Stopped {
+	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
 	}
 
-	f.filterState = N.Starting
+	f.filterState = FilterStateStarting
 	f.adapter = adapterIdx
 
 	if err := f.initFilter(); err != nil {
-		f.filterState = N.Stopped
+		f.filterState = FilterStateStopped
 		return err
 	}
 
@@ -148,28 +150,30 @@ func (f *QueuedPacketFilter) StartFilter(adapterIdx int) error {
 	go f.packetWriteMstcp(ctx)
 	go f.packetWriteAdapter(ctx)
 
-	f.filterState = N.Running
+	f.filterState = FilterStateRunning
 
 	return nil
 }
 
+// StopFilter stops packet filtering.
 func (f *QueuedPacketFilter) StopFilter() error {
-	if f.filterState != N.Running {
+	if f.filterState != FilterStateRunning {
 		return errors.New("filter is not running")
 	}
 
-	f.filterState = N.Stopping
+	f.filterState = FilterStateStopping
 
 	// Cancel the context to stop all goroutines
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
 
-	f.filterState = N.Stopped
+	f.filterState = FilterStateStopped
 
 	return nil
 }
 
+// GetInterfaceNamesList queries the list of the names for the available network interfaces.
 func (f *QueuedPacketFilter) GetInterfaceNamesList() []string {
 	names := make([]string, len(f.networkInterfaces))
 	for i, iface := range f.networkInterfaces {
@@ -178,6 +182,7 @@ func (f *QueuedPacketFilter) GetInterfaceNamesList() []string {
 	return names
 }
 
+// initializeNetworkInterfaces initializes available network interface list.
 func (f *QueuedPacketFilter) initializeNetworkInterfaces() error {
 	for i := range f.adapters.AdapterCount {
 		name := string(f.adapters.AdapterNameList[i][:])
@@ -199,6 +204,7 @@ func (f *QueuedPacketFilter) initializeNetworkInterfaces() error {
 	return nil
 }
 
+// InsertPacketToMstcp inserts a packet into the inbound network flow.
 func (f *QueuedPacketFilter) InsertPacketToMstcp(packetData *A.IntermediateBuffer) error {
 	request := &A.EtherRequest{
 		AdapterHandle: f.networkInterfaces[f.adapter].GetAdapter(),
@@ -210,6 +216,7 @@ func (f *QueuedPacketFilter) InsertPacketToMstcp(packetData *A.IntermediateBuffe
 	return f.SendPacketToMstcp(request)
 }
 
+// InsertPacketToAdapter inserts a packet into the outbound network flow.
 func (f *QueuedPacketFilter) InsertPacketToAdapter(packetData *A.IntermediateBuffer) error {
 	request := &A.EtherRequest{
 		AdapterHandle: f.networkInterfaces[f.adapter].GetAdapter(),
@@ -221,6 +228,7 @@ func (f *QueuedPacketFilter) InsertPacketToAdapter(packetData *A.IntermediateBuf
 	return f.SendPacketToAdapter(request)
 }
 
+// packetRead reads packets from the network interface.
 func (q *QueuedPacketFilter) packetRead(ctx context.Context) {
 	defer q.wg.Done()
 	for {
@@ -228,7 +236,7 @@ func (q *QueuedPacketFilter) packetRead(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if q.filterState != N.Running {
+			if q.filterState != FilterStateRunning {
 				return
 			}
 
@@ -236,7 +244,7 @@ func (q *QueuedPacketFilter) packetRead(ctx context.Context) {
 
 			readRequest := packetBlock.GetReadRequest()
 
-			for q.filterState == N.Running {
+			for q.filterState == FilterStateRunning {
 				q.networkInterfaces[q.adapter].WaitEvent(windows.INFINITE)
 				q.networkInterfaces[q.adapter].ResetEvent()
 
@@ -250,6 +258,7 @@ func (q *QueuedPacketFilter) packetRead(ctx context.Context) {
 	}
 }
 
+// packetProcess processes the read packets.
 func (q *QueuedPacketFilter) packetProcess(ctx context.Context) {
 	defer q.wg.Done()
 	for {
@@ -257,7 +266,7 @@ func (q *QueuedPacketFilter) packetProcess(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if q.filterState != N.Running {
+			if q.filterState != FilterStateRunning {
 				return
 			}
 
@@ -306,6 +315,7 @@ func (q *QueuedPacketFilter) packetProcess(ctx context.Context) {
 	}
 }
 
+// packetWriteMstcp writes packets to the MSTCP.
 func (q *QueuedPacketFilter) packetWriteMstcp(ctx context.Context) {
 	defer q.wg.Done()
 	for {
@@ -313,7 +323,7 @@ func (q *QueuedPacketFilter) packetWriteMstcp(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if q.filterState != N.Running {
+			if q.filterState != FilterStateRunning {
 				return
 			}
 
@@ -330,6 +340,7 @@ func (q *QueuedPacketFilter) packetWriteMstcp(ctx context.Context) {
 	}
 }
 
+// packetWriteAdapter writes packets to the adapter.
 func (q *QueuedPacketFilter) packetWriteAdapter(ctx context.Context) {
 	defer q.wg.Done()
 	for {
@@ -337,7 +348,7 @@ func (q *QueuedPacketFilter) packetWriteAdapter(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if q.filterState != N.Running {
+			if q.filterState != FilterStateRunning {
 				return
 			}
 
@@ -354,6 +365,7 @@ func (q *QueuedPacketFilter) packetWriteAdapter(ctx context.Context) {
 	}
 }
 
+// GetInterfaceHWList queries the list of the available network interfaces.
 func (f *QueuedPacketFilter) GetInterfaceHWList() []string {
 	names := make([]string, len(f.networkInterfaces))
 	for i, iface := range f.networkInterfaces {
@@ -362,6 +374,7 @@ func (f *QueuedPacketFilter) GetInterfaceHWList() []string {
 	return names
 }
 
-func (f *QueuedPacketFilter) GetFilterState() N.FilterState {
+// GetFilterState returns the current filter state.
+func (f *QueuedPacketFilter) GetFilterState() FilterState {
 	return f.filterState
 }

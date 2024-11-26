@@ -36,6 +36,7 @@ const (
 	OID_GEN_CURRENT_PACKET_FILTER = 0x0001010E
 )
 
+// NdisApi represents the NDISAPI driver interface.
 type NdisApi struct {
 	overlapped    windows.Overlapped
 	bytesReturned uint32
@@ -44,6 +45,7 @@ type NdisApi struct {
 	isLoadedSuccessfully bool
 }
 
+// NewNdisApi initializes a new instance of NdisApi.
 func NewNdisApi() (*NdisApi, error) {
 	devicePath, err := windows.UTF16PtrFromString("\\\\.\\NDISRD")
 	if err != nil {
@@ -84,6 +86,7 @@ func NewNdisApi() (*NdisApi, error) {
 	return ndisApi, nil
 }
 
+// Close closes the NDISAPI driver handle and event handle.
 func (a *NdisApi) Close() {
 	if a.fileHandle != windows.InvalidHandle {
 		windows.CloseHandle(a.fileHandle)
@@ -94,10 +97,12 @@ func (a *NdisApi) Close() {
 	}
 }
 
+// IsDriverLoaded checks if the NDISAPI driver is loaded successfully.
 func (a *NdisApi) IsDriverLoaded() bool {
 	return a.isLoadedSuccessfully
 }
 
+// DeviceIoControl sends a control code directly to the NDISAPI driver.
 func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint32, out unsafe.Pointer, sizeOut uint32, SizeRet *uint32, overlapped *windows.Overlapped) error {
 	var returnedBytes uint32
 	if SizeRet == nil {
@@ -115,6 +120,7 @@ func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint
 		overlapped)
 }
 
+// GetTcpipBoundAdaptersInfo retrieves the list of TCPIP-bound adapters.
 func (a *NdisApi) GetTcpipBoundAdaptersInfo() (*TcpAdapterList, error) {
 	var tcpAdapterList TcpAdapterList
 
@@ -135,6 +141,7 @@ func (a *NdisApi) GetTcpipBoundAdaptersInfo() (*TcpAdapterList, error) {
 	return &tcpAdapterList, nil
 }
 
+// SendPacketToMstcp sends a packet to the MSTCP.
 func (a *NdisApi) SendPacketToMstcp(packet *EtherRequest) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKET_TO_MSTCP,
@@ -147,6 +154,7 @@ func (a *NdisApi) SendPacketToMstcp(packet *EtherRequest) error {
 	)
 }
 
+// SendPacketToAdapter sends a packet to the network adapter.
 func (a *NdisApi) SendPacketToAdapter(packet *EtherRequest) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKET_TO_ADAPTER,
@@ -159,6 +167,7 @@ func (a *NdisApi) SendPacketToAdapter(packet *EtherRequest) error {
 	)
 }
 
+// ReadPacket reads a packet from the Windows Packet Filter driver.
 func (a *NdisApi) ReadPacket(packet *EtherRequest) bool {
 	size := uint32(unsafe.Sizeof(EtherRequest{}))
 	err := a.DeviceIoControl(
@@ -174,6 +183,7 @@ func (a *NdisApi) ReadPacket(packet *EtherRequest) bool {
 	return err != nil
 }
 
+// SendPacketsToMstcp sends multiple packets to the Microsoft TCP/IP stack.
 func (a *NdisApi) SendPacketsToMstcp(packet *EtherMultiRequest) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKETS_TO_MSTCP,
@@ -186,6 +196,7 @@ func (a *NdisApi) SendPacketsToMstcp(packet *EtherMultiRequest) error {
 	)
 }
 
+// SendPacketsToAdapter sends multiple packets to the network adapter.
 func (a *NdisApi) SendPacketsToAdapter(packet *EtherMultiRequest) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKETS_TO_ADAPTER,
@@ -198,6 +209,7 @@ func (a *NdisApi) SendPacketsToAdapter(packet *EtherMultiRequest) error {
 	)
 }
 
+// ReadPackets reads multiple packets from the network adapter.
 func (a *NdisApi) ReadPackets(packet *EtherMultiRequest) bool {
 	size := uint32(unsafe.Sizeof(EtherMultiRequest{})) + uint32(unsafe.Sizeof(EthernetPacket{}))*(packet.PacketsNumber-1)
 	err := a.DeviceIoControl(
@@ -213,6 +225,7 @@ func (a *NdisApi) ReadPackets(packet *EtherMultiRequest) bool {
 	return err != nil
 }
 
+// SetAdapterMode sets the filter mode of the network adapter.
 func (a *NdisApi) SetAdapterMode(currentMode *AdapterMode) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SET_ADAPTER_MODE,
@@ -225,6 +238,7 @@ func (a *NdisApi) SetAdapterMode(currentMode *AdapterMode) error {
 	)
 }
 
+// GetAdapterMode retrieves the filter mode of the network adapter.
 func (a *NdisApi) GetAdapterMode(currentMode *AdapterMode) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SET_ADAPTER_MODE,
@@ -237,6 +251,7 @@ func (a *NdisApi) GetAdapterMode(currentMode *AdapterMode) error {
 	)
 }
 
+// FlushAdapterPacketQueue flushes the packet queue of the specified network adapter.
 func (a *NdisApi) FlushAdapterPacketQueue(handle Handle) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_FLUSH_ADAPTER_QUEUE,
@@ -249,6 +264,7 @@ func (a *NdisApi) FlushAdapterPacketQueue(handle Handle) error {
 	)
 }
 
+// SetPacketEvent sets a Win32 event to be signaled when a packet arrives at the specified network adapter.
 func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) error {
 	adapterEvent := AdapterEvent{
 		AdapterHandle: adapter,
@@ -266,6 +282,7 @@ func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) erro
 	)
 }
 
+// SetPacketFilterTable sets the static packet filter table for the Windows Packet Filter driver.
 func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SET_PACKET_FILTERS,
@@ -278,6 +295,7 @@ func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 	)
 }
 
+// ResetPacketFilterTable resets the static packet filter table for the Windows Packet Filter driver.
 func (a *NdisApi) ResetPacketFilterTable() error {
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_RESET_PACKET_FILTERS,
@@ -290,6 +308,7 @@ func (a *NdisApi) ResetPacketFilterTable() error {
 	)
 }
 
+// GetPacketFilterTableSize retrieves the size of the static packet filter table from the Windows Packet Filter driver.
 func (a *NdisApi) GetPacketFilterTableSize() (*uint32, error) {
 	var tableSize uint32
 
@@ -310,6 +329,7 @@ func (a *NdisApi) GetPacketFilterTableSize() (*uint32, error) {
 	return &tableSize, nil
 }
 
+// GetPacketFilterTable retrieves the static packet filter table from the Windows Packet Filter driver.
 func (a *NdisApi) GetPacketFilterTable() (*StaticFilterTable, error) {
 	var staticFilterTable StaticFilterTable
 
@@ -329,6 +349,7 @@ func (a *NdisApi) GetPacketFilterTable() (*StaticFilterTable, error) {
 	return &staticFilterTable, nil
 }
 
+// GetPacketFilterTableResetStats retrieves the static packet filter table and resets statistics for the Windows Packet Filter driver.
 func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
 	var staticFilterTable StaticFilterTable
 
@@ -348,6 +369,7 @@ func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
 	return &staticFilterTable, nil
 }
 
+// ConvertWindows2000AdapterName converts an adapter's internal name to a user-friendly name on Windows 2000 and later.
 func (a *NdisApi) ConvertWindows2000AdapterName(adapterName string) string {
 	if a.IsNdiswanIP(adapterName) {
 		return USER_NDISWANIP
@@ -405,6 +427,7 @@ func RecalculateIPChecksum(packet *IntermediateBuffer) {
 	ipHeader.Checksum = Htons(uint16(sum))
 }
 
+// RecalculateICMPChecksum recalculates the ICMP checksum for the given packet.
 func RecalculateICMPChecksum(packet *IntermediateBuffer) {
 	panic("not implmented yet")
 }
@@ -475,10 +498,12 @@ func RecalculateTCPChecksum(packet *IntermediateBuffer) {
 	tcpHeader.Checksum = Htons(uint16(sum))
 }
 
+// RecalculateUDPChecksum recalculates the UDP checksum for the given packet.
 func RecalculateUDPChecksum(packet *IntermediateBuffer) {
 	panic("not implmented yet")
 }
 
+// IsNdiswanInterfaces checks if the given adapter is an NDISWAN interface.
 func (a *NdisApi) IsNdiswanInterfaces(adapterName, ndiswanName string) bool {
 	isNdiswanInterface := false
 
@@ -487,6 +512,7 @@ func (a *NdisApi) IsNdiswanInterfaces(adapterName, ndiswanName string) bool {
 	return isNdiswanInterface
 }
 
+// IsNdiswanIP checks if the given adapter is an NDISWANIP interface.
 func (a *NdisApi) IsNdiswanIP(adapterName string) bool {
 	if a.IsWindows10OrGreater() && strings.Contains(adapterName, DEVICE_NDISWANIP) {
 		return true
@@ -495,6 +521,7 @@ func (a *NdisApi) IsNdiswanIP(adapterName string) bool {
 	return a.IsNdiswanInterfaces(adapterName, REGSTR_COMPONENTID_NDISWANIP)
 }
 
+// IsNdiswanIPv6 checks if the given adapter is an NDISWANIPV6 interface.
 func (a *NdisApi) IsNdiswanIPv6(adapterName string) bool {
 	if a.IsWindows10OrGreater() && strings.Contains(adapterName, DEVICE_NDISWANIPV6) {
 		return true
@@ -503,6 +530,7 @@ func (a *NdisApi) IsNdiswanIPv6(adapterName string) bool {
 	return a.IsNdiswanInterfaces(adapterName, REGSTR_COMPONENTID_NDISWANIPV6)
 }
 
+// IsNdiswanBh checks if the given adapter is an NDISWANBH interface.
 func (a *NdisApi) IsNdiswanBh(adapterName string) bool {
 	if a.IsWindows10OrGreater() && strings.Contains(adapterName, DEVICE_NDISWANBH) {
 		return true
@@ -511,6 +539,7 @@ func (a *NdisApi) IsNdiswanBh(adapterName string) bool {
 	return a.IsNdiswanInterfaces(adapterName, REGSTR_COMPONENTID_NDISWANBH)
 }
 
+// IsWindows10OrGreater checks if the operating system is Windows 10 or greater.
 func (a *NdisApi) IsWindows10OrGreater() bool {
 	var mod = syscall.NewLazyDLL("kernel32.dll")
 	var proc = mod.NewProc("GetVersion")
