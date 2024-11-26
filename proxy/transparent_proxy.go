@@ -39,7 +39,7 @@ func NewTransparentProxy(socksEndpoint string, socksUsername, socksPassword stri
 // Start starts the transparent proxy server.
 func (tp *TransparentProxy) Start(ctx context.Context) error {
 	var err error
-	tp.listener, err = net.Listen("tcp", "0")
+	tp.listener, err = net.Listen("tcp", ":0")
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %v", err)
 	}

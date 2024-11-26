@@ -20,12 +20,12 @@ var (
 )
 
 func main() {
-
 	api, err := A.NewNdisApi()
 	if err != nil {
 		log.Println(fmt.Errorf("Failed to create NDIS API instance: %v", err))
 		return
 	}
+	defer api.Close()
 
 	proxy, err = P.NewSocksLocalRouter(api)
 	if err != nil {
