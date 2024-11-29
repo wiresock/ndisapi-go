@@ -39,86 +39,6 @@ A Go library providing a comprehensive user-mode interface to the Windows Packet
    go get github.com/wiresock/ndisapi-go
    ```
 
-## Usage
-
-Here's a simple example demonstrating how to capture and modify network packets:
-
-```go
-package main
-
-import (
-    "fmt"
-    "log"
-
-    "github.com/wiresock/ndisapi-go"
-)
-
-func main() {
-    // Initialize the NDISAPI driver interface
-    api, err := ndisapi.NewNDISAPI()
-    if err != nil {
-        log.Fatal("Failed to initialize NDISAPI:", err)
-    }
-    defer api.Close()
-
-    // Retrieve the list of network adapters
-    adapters, err := api.GetAdapterList()
-    if err != nil {
-        log.Fatal("Failed to get adapter list:", err)
-    }
-
-    for idx, adapter := range adapters {
-        fmt.Printf("Adapter %d: %s\n", idx, adapter.FriendlyName)
-    }
-
-    // Select the first adapter for packet interception
-    adapter := adapters[0]
-
-    // Set adapter mode to capture and modify packets
-    err = api.SetAdapterMode(adapter.Handle, ndisapi.MSTCP_FLAG_TUNNEL|ndisapi.MSTCP_FLAG_LOOPBACK_BLOCK)
-    if err != nil {
-        log.Fatal("Failed to set adapter mode:", err)
-    }
-
-    // Allocate a packet filter
-    filter := ndisapi.NewStaticFilter()
-    filter.AdapterHandle = adapter.Handle
-    filter.ValidFields = ndisapi.NETWORK_LAYER_VALID
-    filter.SourceIP = ndisapi.IPAddressFromString("192.168.1.100")
-    filter.SourceIPMask = ndisapi.IPAddressFromString("255.255.255.255")
-    filter.FilterAction = ndisapi.FILTER_PACKET_PASS
-
-    // Set the packet filter
-    err = api.SetPacketFilterTable([]ndisapi.StaticFilter{filter})
-    if err != nil {
-        log.Fatal("Failed to set packet filter table:", err)
-    }
-
-    // Start capturing packets
-    packetChan := make(chan ndisapi.Packet)
-    go func() {
-        err := api.ReadPackets(adapter.Handle, packetChan)
-        if err != nil {
-            log.Fatal("Error reading packets:", err)
-        }
-    }()
-
-    // Process packets
-    for packet := range packetChan {
-        // Inspect or modify the packet as needed
-        fmt.Printf("Captured packet of size %d bytes\n", len(packet.Data))
-
-        // For example, modify packet data here
-
-        // Forward the packet
-        err = api.SendPacketToAdapter(adapter.Handle, packet)
-        if err != nil {
-            fmt.Println("Error sending packet to adapter:", err)
-        }
-    }
-}
-```
-
 ## Documentation
 
 Detailed documentation is available at [pkg.go.dev/github.com/wiresock/ndisapi-go](https://pkg.go.dev/github.com/wiresock/ndisapi-go).
@@ -132,25 +52,7 @@ Additional examples are available in the `examples` directory:
 - **Packet Modifier**: Intercept and modify packets before forwarding.
 - **Packet Generator**: Create and inject custom packets into the network.
 
-## Building from Source
-
-Clone the repository:
-
-```sh
-git clone https://github.com/wiresock/ndisapi-go.git
-```
-
-Navigate to the project directory:
-
-```sh
-cd ndisapi-go
-```
-
-Build your application:
-
-```sh
-go build
-```
+You can find these examples in the [examples](https://github.com/wiresock/ndisapi-go/tree/main/examples) directory of the repository.
 
 ## Contributing
 
@@ -172,7 +74,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Acknowledgments
 
-- **Main Contributor and Maintainer**: [amir.devman@*****.com](mailto:amir.devman@*****.com). Thank you for your significant contributions to this project. Contact details will be updated later.
+- **Main Contributor and Maintainer**: [amir.devman@gmail.com](mailto:amir.devman@gmail.com). Thank you for your significant contributions to this project. Contact details will be updated later.
 - **Windows Packet Filter Driver**: This project relies on the Windows Packet Filter driver developed by [NT Kernel Resources](https://www.ntkernel.com/). Special thanks for providing a powerful tool for network packet filtering.
 
 ## Support
