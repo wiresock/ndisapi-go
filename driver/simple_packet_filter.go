@@ -23,8 +23,8 @@ type SimplePacketFilter struct {
 	filterOutgoingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterState          FilterState
 	networkInterfaces    []*NetworkAdapter
+	adapter              int
 
-	adapter      int
 	packetBuffer []A.IntermediateBuffer
 
 	readRequest         *MultiRequestBuffer

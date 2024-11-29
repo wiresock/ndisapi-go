@@ -1,10 +1,11 @@
 //go:build windows
 
-package driver
+package main
 
 import (
+	"net"
+	"strconv"
 	"sync"
-	"time"
 	"unsafe"
 
 	N "github.com/wiresock/ndisapi-go/netlib"
@@ -12,53 +13,40 @@ import (
 	A "github.com/wiresock/ndisapi-go"
 )
 
-type timestampEndpoint struct {
-	endpoint  uint16
-	timestamp time.Time
+type localRedirect struct {
+	originalDestIP  net.IP
+	originalSrcPort uint16
 }
 
-type TcpLocalRedirector struct {
-	redirectedConnections sync.Map
-	terminate             chan struct{}
-}
-
-func NewTcpLocalRedirector() *TcpLocalRedirector {
-	redirector := &TcpLocalRedirector{
-		redirectedConnections: sync.Map{},
-		terminate:             make(chan struct{}),
+func newLocalRedirect(originalDestIP net.IP, originalSrcPort uint16) localRedirect {
+	return localRedirect{
+		originalDestIP:  originalDestIP,
+		originalSrcPort: originalSrcPort,
 	}
+}
 
-	go redirector.cleanupExpiredConnections()
+func (k localRedirect) String() string {
+	return k.originalDestIP.String() + ":" + strconv.Itoa(int(k.originalSrcPort))
+}
+
+func (k localRedirect) Equal(other localRedirect) bool {
+	return k.originalDestIP.Equal(other.originalDestIP) && k.originalSrcPort == other.originalSrcPort
+}
+
+type LocalRedirector struct {
+	proxyPort             uint16
+	redirectedConnections sync.Map
+}
+
+func NewLocalRedirector(proxyPort uint16) *LocalRedirector {
+	redirector := &LocalRedirector{
+		proxyPort: proxyPort,
+	}
 
 	return redirector
 }
 
-func (l *TcpLocalRedirector) cleanupExpiredConnections() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			now := time.Now()
-			l.redirectedConnections.Range(func(key, value interface{}) bool {
-				timestamp := value.(timestampEndpoint)
-				if now.Sub(timestamp.timestamp) > 5*time.Minute {
-					l.redirectedConnections.Delete(key)
-				}
-				return true
-			})
-		case <-l.terminate:
-			return
-		}
-	}
-}
-
-func (l *TcpLocalRedirector) Stop() {
-	close(l.terminate)
-}
-
-func (l *TcpLocalRedirector) ProcessClientToServerPacket(packet *A.IntermediateBuffer, port uint16) bool {
+func (l *LocalRedirector) ProcessClientToServerPacket(packet *A.IntermediateBuffer, port uint16) bool {
 	etherHeaderSize := int(unsafe.Sizeof(A.EtherHeader{}))
 	if len(packet.Buffer) < etherHeaderSize {
 		return false
@@ -94,26 +82,17 @@ func (l *TcpLocalRedirector) ProcessClientToServerPacket(packet *A.IntermediateB
 	key := newLocalRedirect(ipHeader.DestinationAddr[:], tcpHeader.SourcePort)
 
 	if (tcpHeader.Flags & (N.TH_SYN | N.TH_ACK)) == N.TH_SYN {
-		timestamp := timestampEndpoint{
-			endpoint:  tcpHeader.DestPort,
-			timestamp: time.Now(),
-		}
-
-		if _, loaded := l.redirectedConnections.LoadOrStore(key.String(), timestamp); loaded {
+		if _, loaded := l.redirectedConnections.LoadOrStore(key.String(), tcpHeader.DestPort); loaded {
 			return false
 		}
 	} else {
-		it, exists := l.redirectedConnections.Load(key.String())
-		if ; !exists {
+		_, exists := l.redirectedConnections.Load(key.String())
+		if !exists {
 			return false
 		}
 
 		if (tcpHeader.Flags & (N.TH_RST | N.TH_FIN)) != 0 {
 			l.redirectedConnections.Delete(key.String())
-		} else {
-			timestamp := it.(timestampEndpoint)
-			timestamp.timestamp = time.Now()
-			l.redirectedConnections.Store(key.String(), timestamp)
 		}
 	}
 
@@ -125,13 +104,10 @@ func (l *TcpLocalRedirector) ProcessClientToServerPacket(packet *A.IntermediateB
 
 	tcpHeader.DestPort = port
 
-	A.RecalculateTCPChecksum(packet)
-	A.RecalculateIPChecksum(packet)
-
 	return true
 }
 
-func (l *TcpLocalRedirector) ProcessServerToClientPacket(packet *A.IntermediateBuffer) bool {
+func (l *LocalRedirector) ProcessServerToClientPacket(packet *A.IntermediateBuffer) bool {
 	etherHeaderSize := int(unsafe.Sizeof(A.EtherHeader{}))
 	if len(packet.Buffer) < etherHeaderSize {
 		return false
@@ -169,15 +145,11 @@ func (l *TcpLocalRedirector) ProcessServerToClientPacket(packet *A.IntermediateB
 	if !exists {
 		return false
 	}
-	timestamp := it.(timestampEndpoint)
 
-	tcpHeader.SourcePort = timestamp.endpoint
+	tcpHeader.SourcePort = it.(uint16)
 
 	if (tcpHeader.Flags & (N.TH_RST | N.TH_FIN)) != 0 {
 		l.redirectedConnections.Delete(key.String())
-	} else {
-		timestamp.timestamp = time.Now()
-		l.redirectedConnections.Store(key.String(), timestamp)
 	}
 
 	// 1. Swap Ethernet addresses
@@ -185,9 +157,6 @@ func (l *TcpLocalRedirector) ProcessServerToClientPacket(packet *A.IntermediateB
 
 	// 2. Swap IP addresses
 	ipHeader.DestinationAddr, ipHeader.SourceAddr = ipHeader.SourceAddr, ipHeader.DestinationAddr
-
-	A.RecalculateTCPChecksum(packet)
-	A.RecalculateIPChecksum(packet)
 
 	return true
 }

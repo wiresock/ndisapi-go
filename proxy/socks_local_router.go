@@ -15,6 +15,8 @@ import (
 	A "github.com/wiresock/ndisapi-go"
 	D "github.com/wiresock/ndisapi-go/driver"
 	N "github.com/wiresock/ndisapi-go/netlib"
+
+	"golang.org/x/sys/windows"
 )
 
 // SupportedProtocols defines the supported protocols for the proxy.
@@ -39,7 +41,11 @@ type SocksLocalRouter struct {
 	cancel       context.CancelFunc
 	proxyServers []*TransparentProxy // List of proxy servers managed by this router.
 	nameToProxy  map[string]int      // Map to associate process names with proxy indices.
-	ifIndex      uint32              // Index of the network interface used.
+
+	ifNotifyHandle windows.Handle
+	ifIndex        uint32 // Index of the network interface used.
+	adapters       *A.TcpAdapterList
+	defaultAdapter *A.NetworkAdapterInfo
 
 	process *N.ProcessLookup // Process lookup instance.
 
@@ -61,26 +67,10 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 		return nil, err
 	}
 
-	var selectedAdapter uint32
-
-	// Get network interfaces
-	interfaces, _ := net.Interfaces()
-	firstInterface := interfaces[0]
-
-	// Select the first interface
-	for i := range adapters.AdapterCount {
-		friendlyName := api.ConvertWindows2000AdapterName(string(adapters.AdapterNameList[i][:]))
-		if firstInterface.Name == friendlyName {
-			selectedAdapter = i
-			log.Println("Selected interface:", friendlyName)
-			break
-		}
-	}
-
 	// Initialize process lookup
 	processLookup, err := N.NewProcessLookup()
 	if err != nil {
-		fmt.Println("Error creating process lookup:", err)
+		log.Println("Error creating process lookup:", err)
 		return nil, err
 	}
 
@@ -95,16 +85,17 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 		cancel: cancel,
 
 		nameToProxy: make(map[string]int),
-		ifIndex:     selectedAdapter,
 
 		tcpRedirect: tcpRedirect,
 		process:     processLookup,
+
+		adapters: adapters,
 
 		isActive: false,
 	}
 
 	// Create packet filter
-	filter, err := D.NewQueuedPacketFilter(api, adapters, nil, func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction {
+	filter, err := D.NewQueuedPacketFilter(api, socksLocalRouter.adapters, nil, func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction {
 		etherHeaderSize := int(unsafe.Sizeof(A.EtherHeader{}))
 		if len(buffer.Buffer) < etherHeaderSize {
 			return A.FilterActionPass
@@ -125,7 +116,7 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 			process, err := processLookup.LookupProcessForTcp(ipSession)
 			if process.ID == 0 {
 				if err := processLookup.Actualize(true, false); err != nil {
-					// fmt.Println("Error actualizing process:", err)
+					// log.Println("Error actualizing process:", err)
 					return A.FilterActionPass
 				}
 
@@ -186,6 +177,7 @@ func NewSocksLocalRouter(api *A.NdisApi) (*SocksLocalRouter, error) {
 // Close stops the router and resets the static filter.
 func (s *SocksLocalRouter) Close() error {
 	s.Stop()
+	s.tcpRedirect.Stop()
 	s.staticFilter.Reset()
 	return nil
 }
@@ -209,8 +201,19 @@ func (s *SocksLocalRouter) Start() error {
 		}(server)
 	}
 
-	if err := s.filter.StartFilter(int(s.ifIndex)); err != nil {
-		return fmt.Errorf("Failed to start filter: %v", err)
+	if s.updateNetworkConfiguration() {
+		if err := s.filter.StartFilter(int(s.ifIndex)); err != nil {
+			return fmt.Errorf("Failed to start filter: %v", err)
+		}
+		log.Println("Filter engine has been started using adapter: ", s.defaultAdapter.Name)
+	}
+
+	// Register for network interface change notifications
+	handle, err := N.NotifyIpInterfaceChange(s.ipInterfaceChangedCallback, 0, true)
+	if err != nil {
+		log.Println(fmt.Errorf("NotifyIpInterfaceChange failed: %v", err))
+	} else {
+		s.ifNotifyHandle = handle
 	}
 
 	s.isActive = true
@@ -225,6 +228,12 @@ func (s *SocksLocalRouter) Stop() error {
 	if !s.isActive {
 		return fmt.Errorf("SocksLocalRouter is already stopped")
 	}
+
+	// Cancel network interface change notifications
+	if err := N.CancelMibChangeNotify2(s.ifNotifyHandle); err != nil {
+		return fmt.Errorf("CancelMibChangeNotify2 failed: %v", err)
+	}
+	windows.CloseHandle(s.ifNotifyHandle)
 
 	s.filter.StopFilter()
 
@@ -281,12 +290,10 @@ func (s *SocksLocalRouter) AddSocks5Proxy(endpoint *string, protocol SupportedPr
 	}
 
 	// Create and add new transparent proxy
-	transparentProxy := NewTransparentProxy(*endpoint, *login, *password, func(conn net.Conn) (string, error) {
-		var remoteAddress net.IP
-
+	transparentProxy := NewTransparentProxy(0, *endpoint, *login, *password, func(conn net.Conn) (string, error) {
 		address := strings.Split(conn.RemoteAddr().String(), ":")
 
-		remoteAddress = net.ParseIP(address[0])
+		remoteAddress := net.ParseIP(address[0])
 		port, err := strconv.Atoi(address[1])
 		if err != nil {
 			return "", err
@@ -346,6 +353,56 @@ func (s *SocksLocalRouter) IsTCPProxyPort(port uint16) bool {
 		}
 	}
 	return false
+}
+
+// updateNetworkConfiguration updates the network configuration based on the current state of the IP interfaces.
+func (s *SocksLocalRouter) updateNetworkConfiguration() bool {
+	// Attempts to reconfigure the filter. If it fails, logs an error.
+	if err := s.filter.Reconfigure(); err != nil {
+		log.Println("Failed to update WinpkFilter network interfaces:", err)
+	}
+
+	adapterInfo, adapters, err := A.GetNetworkAdapterInfo(s.NdisApi)
+	if err != nil {
+		log.Fatalf("Failed to get network adapter info: %v", err)
+	}
+	s.adapters = adapters
+	selectedAdapter := adapterInfo[0]
+
+	s.ifIndex = selectedAdapter.AdapterIndex
+	s.defaultAdapter = selectedAdapter
+
+	return true
+}
+
+// This is a callback function to handle changes in the IP interface, typically invoked when there are network changes.
+func (s *SocksLocalRouter) ipInterfaceChangedCallback(callerContext uintptr, row *windows.MibIpInterfaceRow, notificationType N.MibNotificationType) uintptr {
+	adapterInfo, adapters, err := A.GetNetworkAdapterInfo(s.NdisApi)
+	if err != nil {
+		log.Fatalf("Failed to get network adapter info: %v", err)
+	}
+	s.adapters = adapters
+
+	selectedAdapter := adapterInfo[0]
+
+	if int(selectedAdapter.AdapterIndex) == int(s.ifIndex) {
+		// nothing has changed
+		return 0
+	}
+
+	log.Println("default network adapter has changed. Restart the filter engine.")
+
+	s.ifIndex = uint32(selectedAdapter.AdapterIndex)
+	s.defaultAdapter = selectedAdapter
+
+	go func() {
+		s.filter.StopFilter()
+		if s.updateNetworkConfiguration() {
+			s.filter.StartFilter(int(s.ifIndex))
+		}
+	}()
+
+	return 0
 }
 
 // parseEndpoint parses an endpoint string into an IP address and port.

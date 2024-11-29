@@ -17,6 +17,8 @@ type queryRemotePeer func(conn net.Conn) (string, error)
 
 // TransparentProxy represents a transparent proxy server.
 type TransparentProxy struct {
+	port uint16
+
 	socksEndpoint string
 	socksUsername string
 	socksPassword string
@@ -27,8 +29,10 @@ type TransparentProxy struct {
 }
 
 // NewTransparentProxy creates a new instance of TransparentProxy.
-func NewTransparentProxy(socksEndpoint string, socksUsername, socksPassword string, queryRemotePeer queryRemotePeer) *TransparentProxy {
+func NewTransparentProxy(localProxyPort uint16, socksEndpoint string, socksUsername, socksPassword string, queryRemotePeer queryRemotePeer) *TransparentProxy {
 	return &TransparentProxy{
+		port:            localProxyPort,
+
 		socksEndpoint:   socksEndpoint,
 		socksUsername:   socksUsername,
 		socksPassword:   socksPassword,
@@ -39,11 +43,10 @@ func NewTransparentProxy(socksEndpoint string, socksUsername, socksPassword stri
 // Start starts the transparent proxy server.
 func (tp *TransparentProxy) Start(ctx context.Context) error {
 	var err error
-	tp.listener, err = net.Listen("tcp", ":0")
+	tp.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", tp.port))
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %v", err)
 	}
-	defer tp.listener.Close()
 
 	log.Printf("Transparent proxy listening on %s", tp.listener.Addr().String())
 
@@ -95,7 +98,7 @@ func (tp *TransparentProxy) handleConnection(clientConn net.Conn) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	
+
 	// Forward data between client and remote server
 	go tp.forwardData(clientConn, remoteConn, &wg)
 	go tp.forwardData(remoteConn, clientConn, &wg)
@@ -122,6 +125,13 @@ func (tp *TransparentProxy) connectViaSocks5(dst string) (net.Conn, error) {
 func (tp *TransparentProxy) forwardData(src, dst net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 	io.Copy(dst, src)
+	// Close connections when TCP connection has reset or finished
+	if tcpConn, ok := src.(*net.TCPConn); ok {
+		tcpConn.CloseRead()
+	}
+	if tcpConn, ok := dst.(*net.TCPConn); ok {
+		tcpConn.CloseWrite()
+	}
 }
 
 // Stop stops the transparent proxy server.

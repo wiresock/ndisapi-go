@@ -391,7 +391,7 @@ type InitializeFastIOParams struct {
 
 // UnsortedReadSendRequest represents a request for unsorted read/send packets
 type UnsortedReadSendRequest struct {
-	Packets    []*IntermediateBuffer
+	Packets    *IntermediateBuffer
 	PacketsNum uint32
 }
 

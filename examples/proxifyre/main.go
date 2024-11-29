@@ -1,5 +1,3 @@
-//go:build windows
-
 package main
 
 import (
@@ -9,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	_ "net/http/pprof"
 
 	A "github.com/wiresock/ndisapi-go"
 	P "github.com/wiresock/ndisapi-go/proxy"
@@ -25,7 +25,6 @@ func main() {
 		log.Println(fmt.Errorf("Failed to create NDIS API instance: %v", err))
 		return
 	}
-	defer api.Close()
 
 	proxy, err = P.NewSocksLocalRouter(api)
 	if err != nil {
@@ -42,12 +41,12 @@ func main() {
 	defer configFile.Close()
 
 	var serviceSettings struct {
-		Proxies  []struct {
-			AppNames            []string `json:"appNames"`
-			Socks5ProxyEndpoint string   `json:"socks5ProxyEndpoint"`
-			Username            *string  `json:"username"`
-			Password            *string  `json:"password"`
-			SupportedProtocols  []string `json:"supportedProtocols"`
+		Proxies []struct {
+			AppNames  []string `json:"appNames"`
+			Endpoint  string   `json:"endpoint"`
+			Username  *string  `json:"username"`
+			Password  *string  `json:"password"`
+			Protocols []string `json:"protocols"`
 		} `json:"proxies"`
 	}
 
@@ -58,17 +57,17 @@ func main() {
 	// Add SOCKS5 proxies
 	for _, appSettings := range serviceSettings.Proxies {
 		var protocol P.SupportedProtocols
-		if len(appSettings.SupportedProtocols) == 0 || (contains(appSettings.SupportedProtocols, "TCP") && contains(appSettings.SupportedProtocols, "UDP")) {
+		if len(appSettings.Protocols) == 0 || (contains(appSettings.Protocols, "TCP") && contains(appSettings.Protocols, "UDP")) {
 			protocol = P.Both
-		} else if contains(appSettings.SupportedProtocols, "TCP") {
+		} else if contains(appSettings.Protocols, "TCP") {
 			protocol = P.TCP
-		} else if contains(appSettings.SupportedProtocols, "UDP") {
+		} else if contains(appSettings.Protocols, "UDP") {
 			protocol = P.UDP
 		}
 
-		proxyID, err := proxy.AddSocks5Proxy(&appSettings.Socks5ProxyEndpoint, protocol, true, appSettings.Username, appSettings.Password)
+		proxyID, err := proxy.AddSocks5Proxy(&appSettings.Endpoint, protocol, true, appSettings.Username, appSettings.Password)
 		if err != nil {
-			log.Printf("Failed to add Socks5 proxy for endpoint %s: %v", appSettings.Socks5ProxyEndpoint, err)
+			log.Printf("Failed to add Socks5 proxy for endpoint %s: %v", appSettings.Endpoint, err)
 			return
 		}
 
@@ -98,6 +97,9 @@ func main() {
 	} else {
 		log.Println("Socks5 proxy stopped")
 	}
+
+	proxy.Close()
+	api.Close()
 }
 
 func contains(slice []string, item string) bool {

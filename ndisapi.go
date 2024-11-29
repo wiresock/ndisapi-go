@@ -284,10 +284,15 @@ func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) erro
 
 // SetPacketFilterTable sets the static packet filter table for the Windows Packet Filter driver.
 func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
+	var size uint32 = 0
+	if packet != nil {
+		size = uint32(unsafe.Sizeof(StaticFilterTable{})) + (packet.TableSize-1)*uint32(unsafe.Sizeof(StaticFilterEntry{}))
+	}
+
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SET_PACKET_FILTERS,
 		unsafe.Pointer(packet),
-		uint32(unsafe.Sizeof(StaticFilterTable{}))+(packet.TableSize-1)*uint32(unsafe.Sizeof(StaticFilterEntry{})),
+		size,
 		nil,
 		0,
 		nil, // Bytes Returned
@@ -367,6 +372,120 @@ func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
 	}
 
 	return &staticFilterTable, nil
+}
+
+// InitializeFastIo initializes the Fast I/O shared memory section.
+func (a *NdisApi) InitializeFastIo(pFastIo *FastIOSection, dwSize uint32) bool {
+	if dwSize < uint32(unsafe.Sizeof(FastIOSection{})) {
+		return false
+	}
+
+	params := InitializeFastIOParams{HeaderPtr: pFastIo, DataSize: dwSize}
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_INITIALIZE_FAST_IO,
+		unsafe.Pointer(&params),
+		uint32(unsafe.Sizeof(params)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+
+	return err == nil
+}
+
+// AddSecondaryFastIo adds a secondary Fast I/O shared memory section.
+func (a *NdisApi) AddSecondaryFastIo(fastIo *FastIOSection, size uint32) bool {
+	if size < uint32(unsafe.Sizeof(FastIOSection{})) {
+		return false
+	}
+
+	params := InitializeFastIOParams{HeaderPtr: fastIo, DataSize: size}
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_ADD_SECOND_FAST_IO_SECTION,
+		unsafe.Pointer(&params),
+		uint32(unsafe.Sizeof(params)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+
+	return err == nil
+}
+
+// ReadPacketsUnsorted reads a bunch of packets from the driver packet queues without sorting by network adapter.
+func (a *NdisApi) ReadPacketsUnsorted(packets *IntermediateBuffer, dwPacketsNum uint32, pdwPacketsSuccess *uint32) bool {
+	request := UnsortedReadSendRequest{Packets: packets, PacketsNum: dwPacketsNum}
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_READ_PACKETS_UNSORTED,
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		nil, // Bytes Returned
+		nil,
+	)
+
+	*pdwPacketsSuccess = request.PacketsNum
+
+	return err == nil
+}
+
+// SendPacketsToAdaptersUnsorted sends a bunch of packets to the network adapters.
+func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets *IntermediateBuffer, dwPacketsNum uint32, pdwPacketSuccess *uint32) bool {
+	request := UnsortedReadSendRequest{Packets: packets, PacketsNum: dwPacketsNum}
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_SEND_PACKET_TO_ADAPTER_UNSORTED,
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		nil, // Bytes Returned
+		nil,
+	)
+
+	*pdwPacketSuccess = request.PacketsNum
+
+	return err == nil
+}
+
+// SendPacketsToMstcpUnsorted indicates a bunch of packets to the MSTCP (and other upper layer network protocols).
+func (a *NdisApi) SendPacketsToMstcpUnsorted(packets *IntermediateBuffer, dwPacketsNum uint32, pdwPacketSuccess *uint32) bool {
+	request := UnsortedReadSendRequest{Packets: packets, PacketsNum: dwPacketsNum}
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_SEND_PACKET_TO_MSTCP_UNSORTED,
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		unsafe.Pointer(&request),
+		uint32(unsafe.Sizeof(request)),
+		nil, // Bytes Returned
+		nil,
+	)
+
+	*pdwPacketSuccess = request.PacketsNum
+
+	return err == nil
+}
+
+// GetIntermediateBufferPoolSize retrieves the effective size of the Windows Packet Filter internal intermediate buffer pool.
+func (a *NdisApi) GetIntermediateBufferPoolSize(pdwSize *uint32) bool {
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_QUERY_IB_POOL_SIZE,
+		unsafe.Pointer(pdwSize),
+		uint32(unsafe.Sizeof(*pdwSize)),
+		unsafe.Pointer(pdwSize),
+		uint32(unsafe.Sizeof(*pdwSize)),
+		nil, // Bytes Returned
+		nil,
+	)
+
+	return err == nil
 }
 
 // ConvertWindows2000AdapterName converts an adapter's internal name to a user-friendly name on Windows 2000 and later.
