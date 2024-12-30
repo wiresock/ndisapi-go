@@ -6,10 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 
 	A "github.com/wiresock/ndisapi-go"
+	N "github.com/wiresock/ndisapi-go/netlib"
 
 	"golang.org/x/sys/windows"
 )
@@ -22,7 +22,7 @@ type QueuedPacketFilter struct {
 	filterIncomingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterOutgoingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterState          FilterState
-	networkInterfaces    []*NetworkAdapter
+	networkInterfaces    []*N.NetworkAdapter
 	adapter              int
 
 	wg         sync.WaitGroup
@@ -61,7 +61,8 @@ func NewQueuedPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 
 // initFilter initializes the filter and associated data structures required for packet filtering.
 func (f *QueuedPacketFilter) initFilter() error {
-	for i := 0; i < A.MaximumPacketBlock; i++ {
+
+	for i := 0; i < A.MaximumBlockNum; i++ {
 		packetBlock := NewPacketBlock(f.networkInterfaces[f.adapter].GetAdapter())
 		f.packetReadChan <- packetBlock
 	}
@@ -90,9 +91,9 @@ func (f *QueuedPacketFilter) initFilter() error {
 	return nil
 }
 
-// ReleaseFilter releases the filter and associated data structures.
-func (f *QueuedPacketFilter) ReleaseFilter() {
-	f.networkInterfaces[f.adapter].Release()
+// Close releases the filter and associated data structures.
+func (f *QueuedPacketFilter) Close() {
+	f.networkInterfaces[f.adapter].Close()
 
 	// Clear all queues
 	for len(f.packetReadChan) > 0 {
@@ -118,7 +119,7 @@ func (f *QueuedPacketFilter) Reconfigure() error {
 		return errors.New("filter is not stopped")
 	}
 
-	f.networkInterfaces = make([]*NetworkAdapter, 0)
+	f.networkInterfaces = make([]*N.NetworkAdapter, 0)
 	if err := f.initializeNetworkInterfaces(); err != nil {
 		return err
 	}
@@ -173,18 +174,9 @@ func (f *QueuedPacketFilter) StopFilter() error {
 	return nil
 }
 
-// GetInterfaceNamesList queries the list of the names for the available network interfaces.
-func (f *QueuedPacketFilter) GetInterfaceNamesList() []string {
-	names := make([]string, len(f.networkInterfaces))
-	for i, iface := range f.networkInterfaces {
-		names[i] = iface.FriendlyName
-	}
-	return names
-}
-
 // initializeNetworkInterfaces initializes available network interface list.
 func (f *QueuedPacketFilter) initializeNetworkInterfaces() error {
-	for i := range f.adapters.AdapterCount {
+	for i := 0; i < int(f.adapters.AdapterCount); i++ {
 		name := string(f.adapters.AdapterNameList[i][:])
 		adapterHandle := f.adapters.AdapterHandle[i]
 		currentAddress := f.adapters.CurrentAddress[i]
@@ -193,7 +185,7 @@ func (f *QueuedPacketFilter) initializeNetworkInterfaces() error {
 
 		friendlyName := f.ConvertWindows2000AdapterName(name)
 
-		networkAdapter, err := NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
+		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
 		if err != nil {
 			fmt.Println("error creating network adapter", err.Error())
 			continue
@@ -245,8 +237,17 @@ func (q *QueuedPacketFilter) packetRead(ctx context.Context) {
 			readRequest := packetBlock.GetReadRequest()
 
 			for q.filterState == FilterStateRunning {
-				q.networkInterfaces[q.adapter].WaitEvent(windows.INFINITE)
-				q.networkInterfaces[q.adapter].ResetEvent()
+				_, err := q.networkInterfaces[q.adapter].WaitEvent(windows.INFINITE)
+				if err != nil {
+					ctx.Done()
+					return
+				}
+
+				err = q.networkInterfaces[q.adapter].ResetEvent()
+				if err != nil {
+					ctx.Done()
+					return
+				}
 
 				if !q.ReadPackets(readRequest) {
 					break
@@ -363,15 +364,6 @@ func (q *QueuedPacketFilter) packetWriteAdapter(ctx context.Context) {
 			q.packetReadChan <- packetBlock
 		}
 	}
-}
-
-// GetInterfaceHWList queries the list of the available network interfaces.
-func (f *QueuedPacketFilter) GetInterfaceHWList() []string {
-	names := make([]string, len(f.networkInterfaces))
-	for i, iface := range f.networkInterfaces {
-		log.Println(i, iface)
-	}
-	return names
 }
 
 // GetFilterState returns the current filter state.

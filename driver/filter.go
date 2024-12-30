@@ -11,15 +11,6 @@ import (
 
 type MultiRequestBuffer [unsafe.Sizeof(A.EtherMultiRequest{}) + unsafe.Sizeof(A.EthernetPacket{})*(A.MaximumPacketBlock-1)]byte
 
-type FilterState uint32
-
-const (
-	FilterStateStopped FilterState = iota
-	FilterStateStarting
-	FilterStateRunning
-	FilterStateStopping
-)
-
 type Filter struct {
 	networkInterfaceIndex *int              // network interface index
 	sourceMacAddress      *net.HardwareAddr // source MAC address
@@ -30,24 +21,24 @@ type Filter struct {
 	sourcePort            *[2]uint16        // source port (TCP/UDP only)
 	destinationPort       *[2]uint16        // destination port (TCP/UDP only)
 	protocol              *uint8            // IP protocol
-	direction             A.PacketDirection // packet direction
+	direction             PacketDirection // packet direction
 	action                A.FilterAction    // filter action
 }
 
 func NewFilter() *Filter {
 	return &Filter{
-		direction: A.PacketDirectionBoth,
+		direction: PacketDirectionBoth,
 		action:    A.FilterActionPass,
 	}
 }
 
 // Getter for the direction
-func (f *Filter) GetDirection() A.PacketDirection {
+func (f *Filter) GetDirection() PacketDirection {
 	return f.direction
 }
 
 // Setter for the filter direction
-func (f *Filter) SetDirection(direction A.PacketDirection) *Filter {
+func (f *Filter) SetDirection(direction PacketDirection) *Filter {
 	f.direction = direction
 	return f
 }

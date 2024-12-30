@@ -1,6 +1,6 @@
 //go:build windows
 
-package driver
+package netlib
 
 import (
 	"fmt"
@@ -50,8 +50,7 @@ func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddres
 
 	eventHandle, err := windows.CreateEvent(nil, 1, 0, nil)
 	if err != nil {
-		fmt.Println("error creating event for adapter", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("error creating event for adapter: %s", err.Error())
 	}
 	adapter.packetEvent = A.NewSafeEvent(eventHandle)
 
@@ -92,8 +91,8 @@ func (na *NetworkAdapter) SetPacketEvent() error {
 	return na.API.SetPacketEvent(na.CurrentMode.AdapterHandle, na.packetEvent.Handle)
 }
 
-// Release stops filtering the network interface and tries to restore its original state.
-func (na *NetworkAdapter) Release() {
+// Close stops filtering the network interface and tries to restore its original state.
+func (na *NetworkAdapter) Close() {
 	na.SignalEvent()
 
 	// Reset adapter mode and flush the packet queue

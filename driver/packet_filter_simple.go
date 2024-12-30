@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	A "github.com/wiresock/ndisapi-go"
+	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
 type SimplePacketFilter struct {
@@ -22,7 +23,7 @@ type SimplePacketFilter struct {
 	filterIncomingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterOutgoingPacket func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction
 	filterState          FilterState
-	networkInterfaces    []*NetworkAdapter
+	networkInterfaces    []*N.NetworkAdapter
 	adapter              int
 
 	packetBuffer []A.IntermediateBuffer
@@ -96,7 +97,7 @@ func (f *SimplePacketFilter) initFilter() error {
 }
 
 func (f *SimplePacketFilter) initializeNetworkInterfaces() error {
-	for i := range f.adapters.AdapterCount {
+	for i := 0; i < int(f.adapters.AdapterCount); i++ {
 		name := string(f.adapters.AdapterNameList[i][:])
 		adapterHandle := f.adapters.AdapterHandle[i]
 		currentAddress := f.adapters.CurrentAddress[i]
@@ -105,7 +106,7 @@ func (f *SimplePacketFilter) initializeNetworkInterfaces() error {
 
 		friendlyName := f.ConvertWindows2000AdapterName(name)
 
-		networkAdapter, err := NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
+		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
 		if err != nil {
 			fmt.Println("error creating network adapter", err.Error())
 			continue
@@ -116,8 +117,8 @@ func (f *SimplePacketFilter) initializeNetworkInterfaces() error {
 	return nil
 }
 
-func (f *SimplePacketFilter) ReleaseFilter() {
-	f.networkInterfaces[f.adapter].Release()
+func (f *SimplePacketFilter) Close() {
+	f.networkInterfaces[f.adapter].Close()
 }
 
 func (f *SimplePacketFilter) Reconfigure() error {
@@ -168,7 +169,7 @@ func (f *SimplePacketFilter) StopFilter() error {
 	f.wg.Wait()
 	f.filterState = FilterStateStopped
 
-	f.ReleaseFilter()
+	f.Close()
 
 	return nil
 }
@@ -252,22 +253,6 @@ func (f *SimplePacketFilter) filterWorkingThread() {
 			}
 		}
 	}
-}
-
-func (f *SimplePacketFilter) GetInterfaceNamesList() []string {
-	names := make([]string, len(f.networkInterfaces))
-	for i, iface := range f.networkInterfaces {
-		names[i] = iface.FriendlyName
-	}
-	return names
-}
-
-func (f *SimplePacketFilter) GetInterfaceHWList() []MacAddress {
-	names := make([]MacAddress, len(f.networkInterfaces))
-	for i, iface := range f.networkInterfaces {
-		names[i] = iface.HardwareAddr
-	}
-	return names
 }
 
 func (f *SimplePacketFilter) GetFilterState() FilterState {

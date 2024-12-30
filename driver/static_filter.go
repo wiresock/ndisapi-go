@@ -4,10 +4,10 @@ package driver
 
 import (
 	"sync"
+	"syscall"
 	"unsafe"
 
 	A "github.com/wiresock/ndisapi-go"
-
 	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
@@ -15,7 +15,7 @@ type StaticFilter struct {
 	*A.NdisApi
 
 	defaultAction     A.FilterAction
-	networkInterfaces []*NetworkAdapter
+	networkInterfaces []*N.NetworkAdapter
 
 	filters []*Filter
 }
@@ -24,7 +24,7 @@ type StaticFilter struct {
 var instance *StaticFilter
 var once sync.Once
 
-// GetStaticFilter returns a singleton instance of StaticFilter with the provided NdisApi and default action.
+// GetStaticFilter returns a singleton instance of StaticFilter with the provided NdisApi and default actio
 // It initializes network interfaces if not already initialized.
 func GetStaticFilter(api *A.NdisApi, action A.FilterAction) (*StaticFilter, error) {
 	once.Do(func() {
@@ -32,7 +32,7 @@ func GetStaticFilter(api *A.NdisApi, action A.FilterAction) (*StaticFilter, erro
 			NdisApi: api,
 
 			defaultAction:     action,
-			networkInterfaces: make([]*NetworkAdapter, 0),
+			networkInterfaces: make([]*N.NetworkAdapter, 0),
 
 			filters: []*Filter{},
 		}
@@ -78,15 +78,15 @@ func (f *StaticFilter) Apply() error {
 
 	switch f.defaultAction {
 	case A.FilterActionPass:
-		defaultFilter.FilterAction = N.FILTER_PACKET_PASS
+		defaultFilter.FilterAction = FILTER_PACKET_PASS
 	case A.FilterActionDrop:
-		defaultFilter.FilterAction = N.FILTER_PACKET_DROP
+		defaultFilter.FilterAction = FILTER_PACKET_DROP
 	case A.FilterActionRedirect:
-		defaultFilter.FilterAction = N.FILTER_PACKET_REDIRECT
+		defaultFilter.FilterAction = FILTER_PACKET_REDIRECT
 	case A.FilterActionPassRedirect:
-		defaultFilter.FilterAction = N.FILTER_PACKET_PASS_RDR
+		defaultFilter.FilterAction = FILTER_PACKET_PASS_RDR
 	case A.FilterActionDropRedirect:
-		defaultFilter.FilterAction = N.FILTER_PACKET_DROP_RDR
+		defaultFilter.FilterAction = FILTER_PACKET_DROP_RDR
 	}
 	defaultFilter.DirectionFlags = A.PACKET_FLAG_ON_RECEIVE | A.PACKET_FLAG_ON_SEND
 
@@ -111,7 +111,7 @@ func (f *StaticFilter) initializeNetworkInterfaces() error {
 		return err
 	}
 
-	for i := range adapters.AdapterCount {
+	for i := 0; i < int(adapters.AdapterCount); i++ {
 		name := string(adapters.AdapterNameList[i][:])
 		adapterHandle := adapters.AdapterHandle[i]
 		currentAddress := adapters.CurrentAddress[i]
@@ -120,7 +120,7 @@ func (f *StaticFilter) initializeNetworkInterfaces() error {
 
 		friendlyName := f.ConvertWindows2000AdapterName(name)
 
-		networkAdapter, err := NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
+		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
 		if err != nil {
 			continue
 		}
@@ -139,77 +139,77 @@ func (f *StaticFilter) toStaticFilter(filter *Filter, staticFilter *A.StaticFilt
 	}
 
 	switch filter.GetDirection() {
-	case A.PacketDirectionIn:
+	case PacketDirectionIn:
 		staticFilter.DirectionFlags = A.PACKET_FLAG_ON_RECEIVE
-	case A.PacketDirectionOut:
+	case PacketDirectionOut:
 		staticFilter.DirectionFlags = A.PACKET_FLAG_ON_SEND
-	case A.PacketDirectionBoth:
+	case PacketDirectionBoth:
 		staticFilter.DirectionFlags = A.PACKET_FLAG_ON_SEND | A.PACKET_FLAG_ON_RECEIVE
 	}
 
 	switch filter.GetAction() {
 	case A.FilterActionPass:
-		staticFilter.FilterAction = N.FILTER_PACKET_PASS
+		staticFilter.FilterAction = FILTER_PACKET_PASS
 	case A.FilterActionDrop:
-		staticFilter.FilterAction = N.FILTER_PACKET_DROP
+		staticFilter.FilterAction = FILTER_PACKET_DROP
 	case A.FilterActionRedirect:
-		staticFilter.FilterAction = N.FILTER_PACKET_REDIRECT
+		staticFilter.FilterAction = FILTER_PACKET_REDIRECT
 	case A.FilterActionPassRedirect:
-		staticFilter.FilterAction = N.FILTER_PACKET_PASS_RDR
+		staticFilter.FilterAction = FILTER_PACKET_PASS_RDR
 	case A.FilterActionDropRedirect:
-		staticFilter.FilterAction = N.FILTER_PACKET_DROP_RDR
+		staticFilter.FilterAction = FILTER_PACKET_DROP_RDR
 	}
 
 	if filter.GetSourceHWAddress() != nil || filter.GetDestHWAddress() != nil || filter.GetEtherType() != nil {
-		staticFilter.ValidFields |= N.DATA_LINK_LAYER_VALID
-		staticFilter.DataLinkFilter.UnionSelector = N.ETH_802_3
+		staticFilter.ValidFields |= DATA_LINK_LAYER_VALID
+		staticFilter.DataLinkFilter.UnionSelector = ETH_802_3
 
 		if srcHWAddr := filter.GetSourceHWAddress(); srcHWAddr != nil {
-			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= N.ETH_802_3_SRC_ADDRESS
+			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= ETH_802_3_SRC_ADDRESS
 			staticFilter.DataLinkFilter.Eth8023Filter.SrcAddress = *srcHWAddr
 		}
 
 		if destHWAddr := filter.GetDestHWAddress(); destHWAddr != nil {
-			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= N.ETH_802_3_DEST_ADDRESS
+			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= ETH_802_3_DEST_ADDRESS
 			staticFilter.DataLinkFilter.Eth8023Filter.DestAddress = *destHWAddr
 		}
 
 		if etherType := filter.GetEtherType(); etherType != nil {
-			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= N.ETH_802_3_PROTOCOL
+			staticFilter.DataLinkFilter.Eth8023Filter.ValidFields |= ETH_802_3_PROTOCOL
 			staticFilter.DataLinkFilter.Eth8023Filter.Protocol = *etherType
 		}
 	}
 
 	if filter.GetSourceAddress() != nil || filter.GetDestAddress() != nil || filter.GetProtocol() != nil {
-		staticFilter.ValidFields |= N.NETWORK_LAYER_VALID
-		staticFilter.NetworkFilter.UnionSelector = N.IPV4
+		staticFilter.ValidFields |= NETWORK_LAYER_VALID
+		staticFilter.NetworkFilter.UnionSelector = IPV4
 
 		if srcAddr := filter.GetSourceAddress(); srcAddr != nil {
-			staticFilter.NetworkFilter.IPv4.ValidFields |= N.IP_V4_FILTER_SRC_ADDRESS
+			staticFilter.NetworkFilter.IPv4.ValidFields |= IP_V4_FILTER_SRC_ADDRESS
 			staticFilter.NetworkFilter.IPv4.SrcAddress = A.IPv4AddressFromIP(*srcAddr)
 		}
 
 		if destAddr := filter.GetDestAddress(); destAddr != nil {
-			staticFilter.NetworkFilter.IPv4.ValidFields |= N.IP_V4_FILTER_DEST_ADDRESS
+			staticFilter.NetworkFilter.IPv4.ValidFields |= IP_V4_FILTER_DEST_ADDRESS
 			staticFilter.NetworkFilter.IPv4.DestAddress = A.IPv4AddressFromIP(*destAddr)
 		}
 
 		if protocol := filter.GetProtocol(); protocol != nil {
-			staticFilter.NetworkFilter.IPv4.ValidFields |= N.IP_V4_FILTER_PROTOCOL
+			staticFilter.NetworkFilter.IPv4.ValidFields |= IP_V4_FILTER_PROTOCOL
 			staticFilter.NetworkFilter.IPv4.Protocol = *protocol
 		}
 	}
 
 	if filter.GetSourcePort() != nil || filter.GetDestPort() != nil {
-		staticFilter.ValidFields |= N.TRANSPORT_LAYER_VALID
+		staticFilter.ValidFields |= TRANSPORT_LAYER_VALID
 		if protocol := filter.GetProtocol(); protocol != nil {
-			if *protocol == A.IPPROTO_TCP || *protocol == A.IPPROTO_UDP {
-				staticFilter.TransportFilter.UnionSelector = N.TCPUDP
+			if *protocol == syscall.IPPROTO_TCP || *protocol == syscall.IPPROTO_UDP {
+				staticFilter.TransportFilter.UnionSelector = TCPUDP
 			}
 		}
 
 		if srcPort := filter.GetSourcePort(); srcPort != nil {
-			staticFilter.TransportFilter.TCPUDP.ValidFields |= N.TCPUDP_SRC_PORT
+			staticFilter.TransportFilter.TCPUDP.ValidFields |= TCPUDP_SRC_PORT
 			staticFilter.TransportFilter.TCPUDP.SourcePort = A.PortRange{
 				StartRange: srcPort[0],
 				EndRange:   srcPort[1],
@@ -217,7 +217,7 @@ func (f *StaticFilter) toStaticFilter(filter *Filter, staticFilter *A.StaticFilt
 		}
 
 		if destPort := filter.GetDestPort(); destPort != nil {
-			staticFilter.TransportFilter.TCPUDP.ValidFields |= N.TCPUDP_DEST_PORT
+			staticFilter.TransportFilter.TCPUDP.ValidFields |= TCPUDP_DEST_PORT
 			staticFilter.TransportFilter.TCPUDP.DestPort = A.PortRange{
 				StartRange: destPort[0],
 				EndRange:   destPort[1],

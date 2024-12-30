@@ -13,7 +13,7 @@ type RequestStorageType [unsafe.Sizeof(A.EtherMultiRequest{}) + unsafe.Sizeof(A.
 
 // PacketBlock represents a block of packets.
 type PacketBlock struct {
-	packetBuffer        [A.MaximumPacketBlock]A.IntermediateBuffer
+	packetBuffer        *[A.MaximumPacketBlock]A.IntermediateBuffer
 	readRequest         *RequestStorageType
 	writeAdapterRequest *RequestStorageType
 	writeMstcpRequest   *RequestStorageType
@@ -22,8 +22,7 @@ type PacketBlock struct {
 // NewPacketBlock creates a new PacketBlock.
 func NewPacketBlock(adapter A.Handle) *PacketBlock {
 	packetBlock := &PacketBlock{
-		packetBuffer: [A.MaximumPacketBlock]A.IntermediateBuffer{},
-
+		packetBuffer: &[A.MaximumPacketBlock]A.IntermediateBuffer{},
 		readRequest:         &RequestStorageType{},
 		writeAdapterRequest: &RequestStorageType{},
 		writeMstcpRequest:   &RequestStorageType{},

@@ -11,7 +11,7 @@ This example demonstrates how to use the Windows Packet Filter to redirect the s
 | Protocol | IPv4 | IPv6 |
 |----------|------|------|
 | TCP      | ✔️   | ❌   |
-| UDP      | ❌   | ❌   |
+| UDP      | ✔️   | ❌   |
 
 Currently, only TCP over IPv4 is supported. Future updates will include support for UDP and IPv6.
 
@@ -31,12 +31,7 @@ Create `./examples/proxifyre/config.json`:
       "appNames": [
         "firefox"
       ],
-      "endpoint": "127.0.0.1:8080",
-      "username": "",
-      "password": "",
-      "protocols": [
-        "TCP"
-      ]
+      "endpoint": "socks5://127.0.0.1:8080"
     }
   ]
 }
