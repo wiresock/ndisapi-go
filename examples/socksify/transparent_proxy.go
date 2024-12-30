@@ -1,6 +1,6 @@
 //go:build windows
 
-package proxy
+package main
 
 import (
 	"context"
@@ -29,6 +29,7 @@ type TransparentProxy struct {
 }
 
 // NewTransparentProxy creates a new instance of TransparentProxy.
+// a transparent proxy that forwards traffic to a remote host via SOCKS5 proxy.
 func NewTransparentProxy(localProxyPort uint16, socksEndpoint string, socksUsername, socksPassword string, queryRemotePeer queryRemotePeer) *TransparentProxy {
 	return &TransparentProxy{
 		port:            localProxyPort,

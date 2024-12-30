@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -8,15 +10,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	_ "net/http/pprof"
-
 	A "github.com/wiresock/ndisapi-go"
-	P "github.com/wiresock/ndisapi-go/proxy"
 )
 
 var (
-	api   *A.NdisApi
-	proxy *P.SocksLocalRouter
+	api    *A.NdisApi
+	router *SocksLocalRouter
 )
 
 func main() {
@@ -26,7 +25,7 @@ func main() {
 		return
 	}
 
-	proxy, err = P.NewSocksLocalRouter(api)
+	router, err = NewSocksLocalRouter(api, true)
 	if err != nil {
 		log.Println(fmt.Errorf("Failed to create SOCKS5 Local Router instance: %v", err))
 		return
@@ -42,11 +41,8 @@ func main() {
 
 	var serviceSettings struct {
 		Proxies []struct {
-			AppNames  []string `json:"appNames"`
-			Endpoint  string   `json:"endpoint"`
-			Username  *string  `json:"username"`
-			Password  *string  `json:"password"`
-			Protocols []string `json:"protocols"`
+			AppNames []string `json:"appNames"`
+			Endpoint string   `json:"endpoint"`
 		} `json:"proxies"`
 	}
 
@@ -56,30 +52,21 @@ func main() {
 
 	// Add SOCKS5 proxies
 	for _, appSettings := range serviceSettings.Proxies {
-		var protocol P.SupportedProtocols
-		if len(appSettings.Protocols) == 0 || (contains(appSettings.Protocols, "TCP") && contains(appSettings.Protocols, "UDP")) {
-			protocol = P.Both
-		} else if contains(appSettings.Protocols, "TCP") {
-			protocol = P.TCP
-		} else if contains(appSettings.Protocols, "UDP") {
-			protocol = P.UDP
-		}
-
-		proxyID, err := proxy.AddSocks5Proxy(&appSettings.Endpoint, protocol, true, appSettings.Username, appSettings.Password)
+		proxyID, err := router.AddSocks5Proxy(&appSettings.Endpoint)
 		if err != nil {
 			log.Printf("Failed to add Socks5 proxy for endpoint %s: %v", appSettings.Endpoint, err)
 			return
 		}
 
 		for _, appName := range appSettings.AppNames {
-			if err := proxy.AssociateProcessNameToProxy(appName, proxyID); err != nil {
+			if err := router.AssociateProcessNameToProxy(appName, proxyID); err != nil {
 				log.Printf("Failed to associate %s with proxy ID %d: %v", appName, proxyID, err)
 				return
 			}
 		}
 	}
 
-	if err := proxy.Start(); err != nil {
+	if err := router.Start(); err != nil {
 		log.Println(fmt.Sprintf("Error starting filter: %s", err.Error()))
 		return
 	}
@@ -92,13 +79,13 @@ func main() {
 		<-osSignals
 	}
 
-	if err := proxy.Stop(); err != nil {
+	if err := router.Stop(); err != nil {
 		log.Println(fmt.Sprintf("Error stopping proxy: %s", err.Error()))
 	} else {
 		log.Println("Socks5 proxy stopped")
 	}
 
-	proxy.Close()
+	router.Close()
 	api.Close()
 }
 

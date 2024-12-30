@@ -3,6 +3,7 @@
 package netlib
 
 import (
+	"fmt"
 	"syscall"
 	"unsafe"
 
@@ -11,11 +12,14 @@ import (
 
 var (
 	modIphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
+	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
 	procNotifyIpInterfaceChange    = modIphlpapi.NewProc("NotifyIpInterfaceChange")
 	procCancelMibChangeNotify2     = modIphlpapi.NewProc("CancelMibChangeNotify2")
-	procGetExtendedTCPTable        = modIphlpapi.NewProc("GetExtendedTcpTable")
-	procGetOwnerModuleFromTcpEntry = modIphlpapi.NewProc("GetOwnerModuleFromTcpEntry")
+	procGetBestInterfaceEx         = modIphlpapi.NewProc("GetBestInterfaceEx")
+	procGetExtendedTcpTable        = modIphlpapi.NewProc("GetExtendedTcpTable")
+	procGetExtendedUdpTable        = modIphlpapi.NewProc("GetExtendedUdpTable")
+	procQueryFullProcessImageNameW = modkernel32.NewProc("QueryFullProcessImageNameW")
 )
 
 type MibNotificationType uint32
@@ -33,14 +37,6 @@ func getUintptrFromBool(value bool) uintptr {
 		return 1
 	}
 	return 0
-}
-
-func GetOwnerModuleFromTcpEntry(tcpEntry uintptr, infoClass TCPIP_OWNER_MODULE_INFO_CLASS, buffer uintptr, bufferSize *uint32) error {
-	r1, _, _ := syscall.SyscallN(procGetOwnerModuleFromTcpEntry.Addr(), tcpEntry, uintptr(infoClass), buffer, uintptr(unsafe.Pointer(bufferSize)))
-	if r1 != 0 {
-		return syscall.Errno(r1)
-	}
-	return nil
 }
 
 // NotifyIpInterfaceChange registers for network interface change notifications.
@@ -68,8 +64,15 @@ func CancelMibChangeNotify2(handle windows.Handle) error {
 	return nil
 }
 
-func GetExtendedTcpTable(tcpTable uintptr, size *uint32, order bool, addressFamily uint32, tableClass TCP_TABLE_CLASS, reserved uint32) error {
-	r1, _, _ := syscall.SyscallN(procGetExtendedTCPTable.Addr(), tcpTable, uintptr(unsafe.Pointer(size)), getUintptrFromBool(order), uintptr(addressFamily), uintptr(tableClass), uintptr(reserved))
+func getBestInterfaceEx(destAddr []byte, bestIfIndex *uint32) error {
+	if len(destAddr) < 64 {
+		return fmt.Errorf("destAddr must be at least 64 bytes")
+	}
+
+	r1, _, _ := procGetBestInterfaceEx.Call(
+		uintptr(unsafe.Pointer(&destAddr[0])),
+		uintptr(unsafe.Pointer(bestIfIndex)),
+	)
 	if r1 != 0 {
 		return syscall.Errno(r1)
 	}

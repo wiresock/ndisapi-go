@@ -7,6 +7,7 @@ This example demonstrates how to use the Windows Packet Filter to redirect the s
 * Local SOCKS5 proxy (e.g., using an SSH command such as `ssh user@domain.com -D 8080`)
 
 ## Usage
+
 Clone the repository:
 
 ```sh
@@ -29,10 +30,10 @@ go run .\examples\socksify\main.go
 
 You will be prompted to enter the adapter index, application name, SOCKS5 endpoint, username, and password. For example:
 
-```
+```out
 Enter the adapter index: 0
 Enter the application name: firefox.exe
-Enter the SOCKS5 endpoint: 127.0.0.1:8080
+Enter the SOCKS5 endpoint (127.0.0.1:8080): 127.0.0.1:8080
 Enter the SOCKS5 username (leave empty if not required): 
 Enter the SOCKS5 password (leave empty if not required): 
 ```
