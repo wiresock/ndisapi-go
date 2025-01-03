@@ -1,0 +1,41 @@
+name: Go Windows Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        go-version: [1.17, 1.18, 1.19]
+        arch: [amd64, 386, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Run tests
+        run: |
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+            set GOARCH=amd64
+          elif [ "${{ matrix.arch }}" == "386" ]; then
+            set GOARCH=386
+          elif [ "${{ matrix.arch }}" == "arm64" ]; then
+            set GOARCH=arm64
+          fi
+          go test -v ./...
