@@ -66,7 +66,7 @@ func NewNdisApi() (*NdisApi, error) {
 		overlapped.HEvent = 0
 	} else {
 		overlapped.HEvent, err = windows.CreateEvent(nil, 0, 0, nil)
-		if err != nil {
+		if err == nil {
 			isLoadSuccessfully = true
 		}
 	}
