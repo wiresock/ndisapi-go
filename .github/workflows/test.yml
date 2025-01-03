@@ -31,11 +31,11 @@ jobs:
 
       - name: Run tests
         run: |
-          if [ "${{ matrix.arch }}" == "amd64" ]; then
-            set GOARCH=amd64
-          elif [ "${{ matrix.arch }}" == "386" ]; then
-            set GOARCH=386
-          elif [ "${{ matrix.arch }}" == "arm64" ]; then
-            set GOARCH=arm64
-          fi
+          if ($env:GOARCH -eq "amd64") {
+            $env:GOARCH = "amd64"
+          } elseif ($env:GOARCH -eq "386") {
+            $env:GOARCH = "386"
+          } elseif ($env:GOARCH -eq "arm64") {
+            $env:GOARCH = "arm64"
+          }
           go test -v ./...
