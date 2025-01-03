@@ -28,7 +28,7 @@ type EtherMultiRequest struct {
 	AdapterHandle   Handle
 	PacketsNumber   uint32
 	PacketsSuccess  uint32
-	EthernetPackets [510]EthernetPacket
+	EthernetPackets [MaximumPacketBlock]EthernetPacket
 }
 
 // SendPacketToMstcp sends a packet to the MSTCP.

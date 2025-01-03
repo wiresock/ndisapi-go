@@ -14,8 +14,7 @@ const (
 	NDISRD_MINOR_VERSION = 0x0403
 
 	// Common strings set
-	DRIVER_NAME_A   = "NDISRD"
-	DRIVER_NAME_U   = "NDISRD"
+	DRIVER_NAME     = "NDISRD"
 	DEVICE_NAME     = "\\Device\\NDISRD"
 	SYMLINK_NAME    = "\\DosDevices\\NDISRD"
 	WIN9X_REG_PARAM = "System\\CurrentControlSet\\Services\\VxD\\ndisrd\\Parameters"
@@ -98,7 +97,6 @@ type IntermediateBuffer struct {
 	Reserved           [4]uint32
 	Buffer             [MAX_ETHER_FRAME]byte
 }
-
 
 func Ntohl(i uint32) uint32 {
 	return binary.BigEndian.Uint32((*(*[4]byte)(unsafe.Pointer(&i)))[:])
