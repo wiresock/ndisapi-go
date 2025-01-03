@@ -1,12 +1,13 @@
-//go:build go1.18 && windows
-// +build go1.18,windows
+//go:build !go1.18 && windows
+// +build !go1.18,windows
 
 package netlib
 
 import (
 	"context"
 	"fmt"
-	"net/netip"
+	"net"
+	"strconv"
 	"syscall"
 	"unsafe"
 
@@ -20,17 +21,32 @@ type ProcessInfo struct {
 
 type ProcessLookup struct{}
 
-func (s *ProcessLookup) FindProcessInfo(ctx context.Context, isUDP bool, source netip.AddrPort, destination netip.AddrPort, establishedOnly bool) (*ProcessInfo, error) {
-	processName, pid, err := findProcessName(isUDP, source.Addr(), int(source.Port()), establishedOnly)
+func (s *ProcessLookup) FindProcessInfo(ctx context.Context, isUDP bool, source net.Addr, destination net.Addr, establishedOnly bool) (*ProcessInfo, error) {
+	srcAddr, srcPort, err := net.SplitHostPort(source.String())
+	if err != nil {
+		return nil, err
+	}
+	dstAddr, dstPort, err := net.SplitHostPort(destination.String())
+	if err != nil {
+		return nil, err
+	}
+
+	srcIP := net.ParseIP(srcAddr)
+	srcPortInt, err := strconv.Atoi(srcPort)
+	if err != nil {
+		return nil, err
+	}
+
+	processName, pid, err := findProcessName(isUDP, srcIP, srcPortInt, establishedOnly)
 	if err != nil {
 		return nil, err
 	}
 	return &ProcessInfo{PathName: processName, ID: pid}, nil
 }
 
-func findProcessName(isUDP bool, ip netip.Addr, srcPort int, establishedOnly bool) (string, uint32, error) {
+func findProcessName(isUDP bool, ip net.IP, srcPort int, establishedOnly bool) (string, uint32, error) {
 	family := windows.AF_INET
-	if ip.Is6() {
+	if ip.To4() == nil {
 		family = windows.AF_INET6
 	}
 
@@ -73,7 +89,7 @@ type searcher struct {
 	tcpState int
 }
 
-func (s *searcher) search(b []byte, ip netip.Addr, port uint16, establishedOnly bool) (uint32, error) {
+func (s *searcher) search(b []byte, ip net.IP, port uint16, establishedOnly bool) (uint32, error) {
 	n := int(readNativeUint32(b[:4]))
 	itemSize := s.itemSize
 	for i := 0; i < n; i++ {
@@ -93,8 +109,8 @@ func (s *searcher) search(b []byte, ip netip.Addr, port uint16, establishedOnly 
 			continue
 		}
 
-		srcIP, _ := netip.AddrFromSlice(row[s.ip : s.ip+s.ipSize])
-		if ip != srcIP && (!srcIP.IsUnspecified() || s.tcpState != -1) {
+		srcIP := net.IP(row[s.ip : s.ip+s.ipSize])
+		if !ip.Equal(srcIP) && (!srcIP.IsUnspecified() || s.tcpState != -1) {
 			continue
 		}
 
@@ -111,13 +127,12 @@ func newSearcher(isV4, isTCP bool) *searcher {
 	case isV4 && isTCP:
 		itemSize, port, ip, ipSize, pid, tcpState = 24, 8, 4, 4, 20, 0
 	case isV4 && !isTCP:
-		itemSize, port, ip, ipSize, pid = 12, 4, 0, 4, 8
+		itemSize, port, ip, ipSize, pid = 16, 8, 4, 4, 12
 	case !isV4 && isTCP:
-		itemSize, port, ip, ipSize, pid, tcpState = 56, 20, 0, 16, 52, 48
+		itemSize, port, ip, ipSize, pid, tcpState = 56, 16, 8, 16, 48, 0
 	case !isV4 && !isTCP:
-		itemSize, port, ip, ipSize, pid = 28, 20, 0, 16, 24
+		itemSize, port, ip, ipSize, pid = 24, 8, 8, 16, 16
 	}
-
 	return &searcher{
 		itemSize: itemSize,
 		port:     port,
@@ -128,50 +143,37 @@ func newSearcher(isV4, isTCP bool) *searcher {
 	}
 }
 
-func getTransportTable(fn uintptr, family int, class int) ([]byte, error) {
-	for size, buf := uint32(8), make([]byte, 8); ; {
-		ptr := unsafe.Pointer(&buf[0])
-		err, _, _ := syscall.SyscallN(fn, uintptr(ptr), uintptr(unsafe.Pointer(&size)), 0, uintptr(family), uintptr(class), 0)
-
-		switch err {
-		case 0:
-			return buf, nil
-		case uintptr(syscall.ERROR_INSUFFICIENT_BUFFER):
-			buf = make([]byte, size)
-		default:
-			return nil, fmt.Errorf("syscall error: %d", err)
-		}
-	}
-}
-
 func readNativeUint32(b []byte) uint32 {
 	return *(*uint32)(unsafe.Pointer(&b[0]))
 }
 
-func getExecPathFromPID(pid uint32) (string, uint32, error) {
-	switch pid {
-	case 0:
-		return ":System Idle Process", pid, nil
-	case 4:
-		return ":System", pid, nil
+func getTransportTable(fn uintptr, family, class int) ([]byte, error) {
+	var size uint32
+	ret, _, _ := syscall.Syscall6(fn, 6, 0, uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&size)), uintptr(family), uintptr(class), 0)
+	if ret != windows.ERROR_INSUFFICIENT_BUFFER {
+		return nil, syscall.Errno(ret)
 	}
-	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-	if err != nil {
-		return "", pid, err
-	}
-	defer windows.CloseHandle(h)
 
-	buf := make([]uint16, syscall.MAX_LONG_PATH)
-	size := uint32(len(buf))
-	r1, _, err := syscall.SyscallN(
-		procQueryFullProcessImageNameW.Addr(),
-		uintptr(h),
-		uintptr(0),
-		uintptr(unsafe.Pointer(&buf[0])),
-		uintptr(unsafe.Pointer(&size)),
-	)
-	if r1 == 0 {
-		return "", pid, err
+	buf := make([]byte, size)
+	ret, _, _ = syscall.Syscall6(fn, 6, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&size)), uintptr(family), uintptr(class), 0)
+	if ret != 0 {
+		return nil, syscall.Errno(ret)
 	}
-	return syscall.UTF16ToString(buf[:size]), pid, nil
+	return buf, nil
+}
+
+func getExecPathFromPID(pid uint32) (string, uint32, error) {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, false, pid)
+	if err != nil {
+		return "", 0, err
+	}
+	defer windows.CloseHandle(handle)
+
+	var buf [windows.MAX_PATH]uint16
+	size := uint32(len(buf))
+	err = windows.QueryFullProcessImageName(handle, 0, &buf[0], &size)
+	if err != nil {
+		return "", 0, err
+	}
+	return windows.UTF16ToString(buf[:]), pid, nil
 }
