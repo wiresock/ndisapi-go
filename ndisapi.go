@@ -115,3 +115,37 @@ func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint
 		SizeRet,
 		overlapped)
 }
+
+// GetVersion retrieves the NDISAPI driver version.
+func (a *NdisApi) GetVersion() (uint32, error) {
+	var nDriverAPIVersion uint32 = 0xFFFFFFFF;
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_GET_VERSION,
+		unsafe.Pointer(&nDriverAPIVersion),
+		uint32(unsafe.Sizeof(nDriverAPIVersion)),
+		unsafe.Pointer(&nDriverAPIVersion),
+		uint32(unsafe.Sizeof(nDriverAPIVersion)),
+		nil,
+		nil,
+	)
+
+	if err != nil {
+		return nDriverAPIVersion, err
+	}
+
+	return nDriverAPIVersion, nil
+}
+
+// GetIntermediateBufferPoolSize retrieves the effective size of the Windows Packet Filter internal intermediate buffer pool.
+func (a *NdisApi) GetIntermediateBufferPoolSize(size uint32) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_QUERY_IB_POOL_SIZE,
+		unsafe.Pointer(&size),
+		uint32(unsafe.Sizeof(size)),
+		unsafe.Pointer(&size),
+		uint32(unsafe.Sizeof(size)),
+		nil,
+		nil,
+	)
+}

@@ -206,6 +206,12 @@ type StaticFilterTable struct {
 	StaticFilters []StaticFilterEntry
 }
 
+// StaticFilterWithPosition represents a static filter with a specific insertion position.
+type StaticFilterWithPosition struct {
+	Position     uint32
+	StaticFilter StaticFilterEntry
+}
+
 // SetPacketFilterTable sets the static packet filter table for the Windows Packet Filter driver.
 func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 	var size uint32 = 0
@@ -217,6 +223,62 @@ func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 		IOCTL_NDISRD_SET_PACKET_FILTERS,
 		unsafe.Pointer(packet),
 		size,
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// AddStaticFilterFront adds a static filter to the front of the filter list in the Windows Packet Filter driver.
+func (a *NdisApi) AddStaticFilterFront(filter *StaticFilterEntry) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_ADD_PACKET_FILTER_FRONT,
+		unsafe.Pointer(filter),
+		uint32(unsafe.Sizeof(StaticFilterEntry{})),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// AddStaticFilterBack adds a static filter to the end of the filter chain.
+func (a *NdisApi) AddStaticFilterBack(filter *StaticFilterEntry) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_ADD_PACKET_FILTER_BACK,
+		unsafe.Pointer(filter),
+		uint32(unsafe.Sizeof(StaticFilterEntry{})),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// InsertStaticFilter inserts a static filter at a specified position in the filter chain.
+func (a *NdisApi) InsertStaticFilter(filter *StaticFilterEntry, position uint32) error {
+	staticFilter := StaticFilterWithPosition{
+		Position:     position,
+		StaticFilter: *filter,
+	}
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_INSERT_FILTER_BY_INDEX,
+		unsafe.Pointer(&staticFilter),
+		uint32(unsafe.Sizeof(StaticFilterWithPosition{})),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// InsertStaticFilter removes a static filter by its unique identifier.
+func (a *NdisApi) RemoveStaticFilter(filterID uint32) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_REMOVE_FILTER_BY_INDEX,
+		unsafe.Pointer(&filterID),
+		uint32(unsafe.Sizeof(filterID)),
 		nil,
 		0,
 		nil, // Bytes Returned
@@ -298,6 +360,63 @@ func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
 	return &staticFilterTable, nil
 }
 
+// SetPacketFilterCacheState sets the state of the packet filter cache.
+func (a *NdisApi) SetPacketFilterCacheState(state bool) error {
+	var cacheState uint32
+	if state {
+		cacheState = 1
+	} else {
+		cacheState = 0
+	}
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_FILTER_CACHE_STATE,
+		unsafe.Pointer(&cacheState),
+		uint32(unsafe.Sizeof(cacheState)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// SetPacketFragmentCacheState sets the state of the packet fragment cache.
+func (a *NdisApi) SetPacketFragmentCacheState(state bool) error {
+	var cacheState uint32
+	if state {
+		cacheState = 1
+	} else {
+		cacheState = 0
+	}
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_FRAGMENT_CACHE_STATE,
+		unsafe.Pointer(&cacheState),
+		uint32(unsafe.Sizeof(cacheState)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+// EnablePacketFilterCache enables the packet filter cache.
+func (a *NdisApi) EnablePacketFilterCache() error {
+	return a.SetPacketFilterCacheState(true)
+}
+
+// DisablePacketFilterCache disables the packet filter cache.
+func (a *NdisApi) DisablePacketFilterCache() error {
+	return a.SetPacketFilterCacheState(false)
+}
+
+// EnablePacketFragmentCache enables the packet fragment cache.
+func (a *NdisApi) EnablePacketFragmentCache() error {
+	return a.SetPacketFragmentCacheState(true)
+}
+
+// DisablePacketFragmentCache disables the packet fragment cache.
+func (a *NdisApi) DisablePacketFragmentCache() error {
+	return a.SetPacketFragmentCacheState(false)
+}
 
 // IsNdiswanInterfaces checks if the given adapter is an NDISWAN interface.
 func (a *NdisApi) IsNdiswanInterfaces(adapterName, ndiswanName string) bool {
@@ -334,8 +453,10 @@ func (a *NdisApi) IsNdiswanBh(adapterName string) bool {
 
 	return a.IsNdiswanInterfaces(adapterName, REGSTR_COMPONENTID_NDISWANBH)
 }
+
 var mod = syscall.NewLazyDLL("kernel32.dll")
 var proc = mod.NewProc("GetVersion")
+
 // IsWindows10OrGreater checks if the operating system is Windows 10 or greater.
 func (a *NdisApi) IsWindows10OrGreater() bool {
 	version, _, _ := proc.Call()

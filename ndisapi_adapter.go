@@ -88,6 +88,51 @@ func (a *NdisApi) GetAdapterMode(currentMode *AdapterMode) error {
 	)
 }
 
+// FlushAdapterPacketQueue flushes the packet queue of the specified network adapter.
+func (a *NdisApi) FlushAdapterPacketQueue(adapter Handle) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_FLUSH_ADAPTER_QUEUE,
+		unsafe.Pointer(&adapter),
+		uint32(len(adapter)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
+
+// GetAdapterPacketQueueSize retrieves the size of the packet queue for the specified network adapter.
+func (a *NdisApi) GetAdapterPacketQueueSize(adapter Handle, size *uint32) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_GET_VERSION,
+		unsafe.Pointer(&adapter),
+		uint32(len(adapter)),
+		unsafe.Pointer(&size),
+		uint32(unsafe.Sizeof(size)),
+		nil,
+		nil,
+	)
+}
+
+// SetPacketEvent sets a Win32 event to be signaled when a packet arrives at the specified network adapter.
+func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) error {
+	adapterEvent := AdapterEvent{
+		AdapterHandle: adapter,
+		Event:         win32Event,
+	}
+
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_EVENT,
+		unsafe.Pointer(&adapterEvent),
+		uint32(unsafe.Sizeof(adapterEvent)),
+		nil,
+		0,
+		nil, // Bytes Returned
+		nil,
+	)
+}
+
 // ConvertWindows2000AdapterName converts an adapter's internal name to a user-friendly name on Windows 2000 and later.
 func (a *NdisApi) ConvertWindows2000AdapterName(adapterName string) string {
 	if a.IsNdiswanIP(adapterName) {

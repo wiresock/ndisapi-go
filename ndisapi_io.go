@@ -4,8 +4,6 @@ package ndisapi
 
 import (
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 const MaximumBlockNum = 10
@@ -113,35 +111,4 @@ func (a *NdisApi) ReadPackets(packet *EtherMultiRequest) bool {
 	)
 
 	return err != nil
-}
-
-// FlushAdapterPacketQueue flushes the packet queue of the specified network adapter.
-func (a *NdisApi) FlushAdapterPacketQueue(handle Handle) error {
-	return a.DeviceIoControl(
-		IOCTL_NDISRD_FLUSH_ADAPTER_QUEUE,
-		unsafe.Pointer(&handle),
-		uint32(len(handle)),
-		nil,
-		0,
-		nil, // Bytes Returned
-		nil,
-	)
-}
-
-// SetPacketEvent sets a Win32 event to be signaled when a packet arrives at the specified network adapter.
-func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) error {
-	adapterEvent := AdapterEvent{
-		AdapterHandle: adapter,
-		Event:         win32Event,
-	}
-
-	return a.DeviceIoControl(
-		IOCTL_NDISRD_SET_EVENT,
-		unsafe.Pointer(&adapterEvent),
-		uint32(unsafe.Sizeof(adapterEvent)),
-		nil,
-		0,
-		nil, // Bytes Returned
-		nil,
-	)
 }
