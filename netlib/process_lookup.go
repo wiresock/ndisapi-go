@@ -1,4 +1,5 @@
-//go:build windows
+//go:build go1.18 && windows
+// +build go1.18,windows
 
 package netlib
 
