@@ -32,6 +32,8 @@ const (
 	OID_GEN_CURRENT_PACKET_FILTER = 0x0001010E
 )
 
+var _ NdisApiInterface = (*NdisApi)(nil)
+
 // NdisApi represents the NDISAPI driver interface.
 type NdisApi struct {
 	overlapped    windows.Overlapped

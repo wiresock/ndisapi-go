@@ -21,7 +21,7 @@ type Filter struct {
 	sourcePort            *[2]uint16        // source port (TCP/UDP only)
 	destinationPort       *[2]uint16        // destination port (TCP/UDP only)
 	protocol              *uint8            // IP protocol
-	direction             PacketDirection // packet direction
+	direction             PacketDirection   // packet direction
 	action                A.FilterAction    // filter action
 }
 

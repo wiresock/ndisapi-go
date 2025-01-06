@@ -12,6 +12,7 @@ import (
 
 	A "github.com/wiresock/ndisapi-go"
 	N "github.com/wiresock/ndisapi-go/netlib"
+
 	"golang.org/x/sys/windows"
 )
 
