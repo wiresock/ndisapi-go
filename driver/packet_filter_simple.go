@@ -15,6 +15,8 @@ import (
 	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
+var _ PacketFilter = (*SimplePacketFilter)(nil)
+
 type SimplePacketFilter struct {
 	*A.NdisApi
 

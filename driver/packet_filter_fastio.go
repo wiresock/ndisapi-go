@@ -15,6 +15,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var _ PacketFilter = (*FastIOPacketFilter)(nil)
+
 const fastIOSize = 0x300000
 
 type requestStorageType [unsafe.Sizeof(A.IntermediateBuffer{}) * A.FastIOMaximumPacketBlock]byte

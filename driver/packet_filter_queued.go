@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var _ PacketFilter = (*QueuedPacketFilter)(nil)
+
 type QueuedPacketFilter struct {
 	*A.NdisApi
 
@@ -61,7 +63,6 @@ func NewQueuedPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out f
 
 // initFilter initializes the filter and associated data structures required for packet filtering.
 func (f *QueuedPacketFilter) initFilter() error {
-
 	for i := 0; i < A.MaximumBlockNum; i++ {
 		packetBlock := NewPacketBlock(f.networkInterfaces[f.adapter].GetAdapter())
 		f.packetReadChan <- packetBlock
