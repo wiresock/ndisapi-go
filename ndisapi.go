@@ -63,9 +63,12 @@ func NewNdisApi() (*NdisApi, error) {
 		windows.FILE_ATTRIBUTE_NORMAL,
 		0,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	if err == windows.ERROR_INVALID_HANDLE {
-		overlapped.HEvent = 0
+	if fileHandle == windows.InvalidHandle {
+		isLoadSuccessfully = false
 	} else {
 		overlapped.HEvent, err = windows.CreateEvent(nil, 0, 0, nil)
 		if err == nil {
@@ -120,7 +123,7 @@ func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint
 
 // GetVersion retrieves the NDISAPI driver version.
 func (a *NdisApi) GetVersion() (uint32, error) {
-	var nDriverAPIVersion uint32 = 0xFFFFFFFF;
+	var nDriverAPIVersion uint32 = 0xFFFFFFFF
 
 	err := a.DeviceIoControl(
 		IOCTL_NDISRD_GET_VERSION,
