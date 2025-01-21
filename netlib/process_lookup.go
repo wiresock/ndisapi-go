@@ -7,25 +7,77 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-type ProcessInfo struct {
-	ID       uint32
-	PathName string
+type sourceDestination struct {
+	source      netip.AddrPort
+	destination netip.AddrPort
 }
 
-type ProcessLookup struct{}
+type ProcessInfo struct {
+	ID        uint32
+	PathName  string
+	Timestamp time.Time
+}
+
+type ProcessLookup struct {
+	sync.RWMutex
+	mapper map[sourceDestination]ProcessInfo
+}
+
+func NewProcessLookup() *ProcessLookup {
+	return &ProcessLookup{
+		mapper: make(map[sourceDestination]ProcessInfo),
+	}
+}
 
 func (s *ProcessLookup) FindProcessInfo(ctx context.Context, isUDP bool, source netip.AddrPort, destination netip.AddrPort, establishedOnly bool) (*ProcessInfo, error) {
+	s.RLock()
+	if info, ok := s.mapper[sourceDestination{source, destination}]; ok {
+		s.RUnlock()
+		return &info, nil
+	}
+	s.RUnlock()
 	processName, pid, err := findProcessName(isUDP, source.Addr(), int(source.Port()), establishedOnly)
 	if err != nil {
 		return nil, err
 	}
+	s.Lock()
+	s.mapper[sourceDestination{source, destination}] = ProcessInfo{PathName: processName, ID: pid, Timestamp: time.Now()}
+	s.Unlock()
+
 	return &ProcessInfo{PathName: processName, ID: pid}, nil
+}
+
+func (s *ProcessLookup) StartCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.cleanup()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *ProcessLookup) cleanup() {
+	s.Lock()
+	defer s.Unlock()
+
+	for key, info := range s.mapper {
+		if time.Since(info.Timestamp) > time.Minute {
+			delete(s.mapper, key)
+		}
+	}
 }
 
 func findProcessName(isUDP bool, ip netip.Addr, srcPort int, establishedOnly bool) (string, uint32, error) {
