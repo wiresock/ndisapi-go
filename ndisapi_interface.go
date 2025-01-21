@@ -34,13 +34,13 @@ type NdisApiInterface interface {
 	SendPacketsToAdapter(packet *EtherMultiRequest) error
 	ReadPackets(packet *EtherMultiRequest) bool
 	SetPacketFilterTable(packet *StaticFilterTable) error
-	AddStaticFilterFront(filter *StaticFilterEntry) error
-	AddStaticFilterBack(filter *StaticFilterEntry) error
-	InsertStaticFilter(filter *StaticFilterEntry, position uint32) error
+	AddStaticFilterFront(filter *StaticFilter) error
+	AddStaticFilterBack(filter *StaticFilter) error
+	InsertStaticFilter(filter *StaticFilter, position uint32) error
 	RemoveStaticFilter(filterID uint32) error
 	ResetPacketFilterTable() error
-	GetPacketFilterTableSize() (*uint32, error)
-	GetPacketFilterTable() (*StaticFilterTable, error)
+	GetPacketFilterTableSize() (uint32, error)
+	GetPacketFilterTable(uint32) (*StaticFilterTable, error)
 	GetPacketFilterTableResetStats() (*StaticFilterTable, error)
 	SetPacketFilterCacheState(state bool) error
 	SetPacketFragmentCacheState(state bool) error

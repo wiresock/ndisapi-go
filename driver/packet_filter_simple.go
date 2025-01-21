@@ -15,6 +15,8 @@ import (
 	N "github.com/wiresock/ndisapi-go/netlib"
 )
 
+type MultiRequestBuffer [unsafe.Sizeof(A.EtherMultiRequest{}) + unsafe.Sizeof(A.EthernetPacket{})*(A.MaximumPacketBlock-1)]byte
+
 var _ PacketFilter = (*SimplePacketFilter)(nil)
 
 type SimplePacketFilter struct {

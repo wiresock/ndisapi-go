@@ -51,7 +51,7 @@ func (mr *MockNdisApiInterfaceMockRecorder) AddSecondaryFastIo(fastIo, size inte
 }
 
 // AddStaticFilterBack mocks base method.
-func (m *MockNdisApiInterface) AddStaticFilterBack(filter *ndisapi.StaticFilterEntry) error {
+func (m *MockNdisApiInterface) AddStaticFilterBack(filter *ndisapi.StaticFilter) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStaticFilterBack", filter)
 	ret0, _ := ret[0].(error)
@@ -65,7 +65,7 @@ func (mr *MockNdisApiInterfaceMockRecorder) AddStaticFilterBack(filter interface
 }
 
 // AddStaticFilterFront mocks base method.
-func (m *MockNdisApiInterface) AddStaticFilterFront(filter *ndisapi.StaticFilterEntry) error {
+func (m *MockNdisApiInterface) AddStaticFilterFront(filter *ndisapi.StaticFilter) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStaticFilterFront", filter)
 	ret0, _ := ret[0].(error)
@@ -320,7 +320,7 @@ func (mr *MockNdisApiInterfaceMockRecorder) InitializeFastIo(pFastIo, dwSize int
 }
 
 // InsertStaticFilter mocks base method.
-func (m *MockNdisApiInterface) InsertStaticFilter(filter *ndisapi.StaticFilterEntry, position uint32) error {
+func (m *MockNdisApiInterface) InsertStaticFilter(filter *ndisapi.StaticFilter, position uint32) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertStaticFilter", filter, position)
 	ret0, _ := ret[0].(error)

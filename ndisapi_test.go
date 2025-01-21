@@ -339,7 +339,7 @@ func TestNdisApi_AddStaticFilterFront(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNdis := mock_ndisapi.NewMockNdisApiInterface(ctrl)
-	filter := &ndisapi.StaticFilterEntry{}
+	filter := &ndisapi.StaticFilter{}
 	mockNdis.EXPECT().AddStaticFilterFront(filter).Return(nil)
 
 	err := mockNdis.AddStaticFilterFront(filter)
@@ -351,7 +351,7 @@ func TestNdisApi_AddStaticFilterBack(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNdis := mock_ndisapi.NewMockNdisApiInterface(ctrl)
-	filter := &ndisapi.StaticFilterEntry{}
+	filter := &ndisapi.StaticFilter{}
 	mockNdis.EXPECT().AddStaticFilterBack(filter).Return(nil)
 
 	err := mockNdis.AddStaticFilterBack(filter)
@@ -363,7 +363,7 @@ func TestNdisApi_InsertStaticFilter(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNdis := mock_ndisapi.NewMockNdisApiInterface(ctrl)
-	filter := &ndisapi.StaticFilterEntry{}
+	filter := &ndisapi.StaticFilter{}
 	position := uint32(1)
 	mockNdis.EXPECT().InsertStaticFilter(filter, position).Return(nil)
 
