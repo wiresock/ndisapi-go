@@ -27,12 +27,12 @@ func NewStaticFilters(api *A.NdisApi, filterCache, fragmentCache bool) (*StaticF
 
 	err := api.SetPacketFilterCacheState(filterCache)
 	if err != nil {
-		return nil, fmt.Errorf("SetPacketFilterCacheState: %v", err)
+		return nil, fmt.Errorf("failed to set packet filter cache state: %v", err)
 	}
 
 	err = api.SetPacketFragmentCacheState(fragmentCache)
 	if err != nil {
-		return nil, fmt.Errorf("SetPacketFragmentCacheState: %v", err)
+		return nil, fmt.Errorf("failed to set packet fragment cache state: %v", err)
 	}
 
 	return staticFilter, nil
@@ -150,20 +150,20 @@ func (f *StaticFilters) LoadTable() (*A.StaticFilterTable, error) {
 	tableSize, err = f.GetPacketFilterTableSize()
 	if err != nil || tableSize == 0 {
 		// Failed to get table size or table is empty
-		return nil, err
+		return nil, fmt.Errorf("failed to get packet filter table size: %v", err)
 	}
 
 	table, err := f.GetPacketFilterTable(tableSize)
 	if err != nil {
 		// Failed to get the filter table
-		return nil, err
+		return nil, fmt.Errorf("failed to get the filter table: %v", err)
 	}
 
 	// Clear the current filters list
 	f.Filters = []Filter{}
 
 	// Iterate through the STATIC_FILTER entries and reconstruct the filters list
-	for i := 0; i < int(tableSize); i++ { // Last entry is the default action, so we skip it
+	for i := 0; i < int(tableSize); i++ {
 		staticFilter := table.StaticFilters[i]
 		f.Filters = append(f.Filters, *f.fromStaticFilter(&staticFilter))
 	}
