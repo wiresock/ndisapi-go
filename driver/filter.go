@@ -11,17 +11,17 @@ import (
 
 type Filter struct {
 	*A.StaticFilter
-	AdapterHandle         A.Handle         // adapter handle
-	SourceMacAddress      net.HardwareAddr // source MAC address
-	DestinationMacAddress net.HardwareAddr // destination MAC address
-	EthernetType          uint16           // Ethernet type
-	SourceAddress         net.IPNet        // source IP
-	DestinationAddress    net.IPNet        // destination IP
-	SourcePort            [2]uint16        // source port (TCP/UDP only)
-	DestinationPort       [2]uint16        // destination port (TCP/UDP only)
-	Protocol              uint8            // IP protocol
-	Direction             PacketDirection  // packet direction
-	Action                A.FilterAction   // filter action
+	AdapterHandle         A.Handle
+	SourceMacAddress      net.HardwareAddr
+	DestinationMacAddress net.HardwareAddr
+	EthernetType          uint16
+	SourceAddress         net.IPNet
+	DestinationAddress    net.IPNet
+	SourcePort            [2]uint16
+	DestinationPort       [2]uint16
+	Protocol              uint8
+	Direction             PacketDirection
+	Action                A.FilterAction
 }
 
 // Equal checks if two filters are equal
