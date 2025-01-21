@@ -51,7 +51,7 @@ func (a *NdisApi) GetTcpipBoundAdaptersInfo() (*TcpAdapterList, error) {
 		uint32(unsafe.Sizeof(tcpAdapterList)),
 		unsafe.Pointer(&tcpAdapterList),
 		uint32(unsafe.Sizeof(tcpAdapterList)),
-		nil,
+		&a.bytesReturned,
 		nil,
 	)
 
@@ -70,7 +70,7 @@ func (a *NdisApi) SetAdapterMode(currentMode *AdapterMode) error {
 		uint32(unsafe.Sizeof(AdapterMode{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -83,7 +83,7 @@ func (a *NdisApi) GetAdapterMode(currentMode *AdapterMode) error {
 		uint32(unsafe.Sizeof(AdapterMode{})),
 		unsafe.Pointer(currentMode),
 		uint32(unsafe.Sizeof(AdapterMode{})),
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -96,7 +96,7 @@ func (a *NdisApi) FlushAdapterPacketQueue(adapter Handle) error {
 		uint32(len(adapter)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -128,7 +128,7 @@ func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) erro
 		uint32(unsafe.Sizeof(adapterEvent)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }

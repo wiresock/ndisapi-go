@@ -36,11 +36,10 @@ var _ NdisApiInterface = (*NdisApi)(nil)
 
 // NdisApi represents the NDISAPI driver interface.
 type NdisApi struct {
-	overlapped    windows.Overlapped
-	bytesReturned uint32
-
-	fileHandle           windows.Handle
-	isLoadedSuccessfully bool
+	overlapped     windows.Overlapped
+	fileHandle     windows.Handle
+	isDriverLoaded bool
+	bytesReturned  uint32
 }
 
 // NewNdisApi initializes a new instance of NdisApi.
@@ -77,11 +76,9 @@ func NewNdisApi() (*NdisApi, error) {
 	}
 
 	ndisApi := &NdisApi{
-		overlapped:    overlapped,
-		bytesReturned: 0,
-
-		fileHandle:           fileHandle,
-		isLoadedSuccessfully: isLoadSuccessfully,
+		overlapped:     overlapped,
+		fileHandle:     fileHandle,
+		isDriverLoaded: isLoadSuccessfully,
 	}
 
 	return ndisApi, nil
@@ -100,7 +97,12 @@ func (a *NdisApi) Close() {
 
 // IsDriverLoaded checks if the NDISAPI driver is loaded successfully.
 func (a *NdisApi) IsDriverLoaded() bool {
-	return a.isLoadedSuccessfully
+	return a.isDriverLoaded
+}
+
+// GetBytesReturned retrieves the number of bytes returned by the last DeviceIoControl call.
+func (a *NdisApi) GetBytesReturned() uint32 {
+	return a.bytesReturned
 }
 
 // DeviceIoControl sends a control code directly to the NDISAPI driver.

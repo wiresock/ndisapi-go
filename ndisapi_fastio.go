@@ -82,7 +82,7 @@ func (a *NdisApi) InitializeFastIo(pFastIo *InitializeFastIOSection, dwSize uint
 		uint32(unsafe.Sizeof(params)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 
@@ -103,7 +103,7 @@ func (a *NdisApi) AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint3
 		uint32(unsafe.Sizeof(params)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 
@@ -124,7 +124,7 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, dwPacketsNu
 		uint32(unsafe.Sizeof(request)),
 		unsafe.Pointer(&request),
 		uint32(unsafe.Sizeof(request)),
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 
@@ -147,7 +147,7 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, d
 		uint32(unsafe.Sizeof(request)),
 		unsafe.Pointer(&request),
 		uint32(unsafe.Sizeof(request)),
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 
@@ -170,7 +170,7 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, dwPa
 		uint32(unsafe.Sizeof(request)),
 		unsafe.Pointer(&request),
 		uint32(unsafe.Sizeof(request)),
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 

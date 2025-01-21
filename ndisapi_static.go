@@ -517,7 +517,7 @@ func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 		size,
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -530,7 +530,7 @@ func (a *NdisApi) AddStaticFilterFront(filter *StaticFilter) error {
 		uint32(unsafe.Sizeof(StaticFilter{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -543,7 +543,7 @@ func (a *NdisApi) AddStaticFilterBack(filter *StaticFilter) error {
 		uint32(unsafe.Sizeof(StaticFilter{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -560,7 +560,7 @@ func (a *NdisApi) InsertStaticFilter(filter *StaticFilter, position uint32) erro
 		uint32(unsafe.Sizeof(StaticFilterWithPosition{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -573,7 +573,7 @@ func (a *NdisApi) RemoveStaticFilter(filterID uint32) error {
 		uint32(unsafe.Sizeof(filterID)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -586,7 +586,7 @@ func (a *NdisApi) ResetPacketFilterTable() error {
 		0,
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -624,7 +624,7 @@ func (a *NdisApi) GetPacketFilterTable(tableSize uint32) (*StaticFilterTable, er
 		0,
 		unsafe.Pointer(&tableBuffer[0]),
 		uint32(bufferSize),
-		&a.bytesReturned, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 	if err != nil {
@@ -655,7 +655,7 @@ func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
 		0,
 		unsafe.Pointer(&staticFilterTable),
 		uint32(unsafe.Sizeof(StaticFilterTable{}))+(staticFilterTable.TableSize-AnySize)*uint32(unsafe.Sizeof(StaticFilter{})),
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 	if err != nil {
@@ -679,7 +679,7 @@ func (a *NdisApi) SetPacketFilterCacheState(state bool) error {
 		uint32(unsafe.Sizeof(cacheState)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -698,7 +698,7 @@ func (a *NdisApi) SetPacketFragmentCacheState(state bool) error {
 		uint32(unsafe.Sizeof(cacheState)),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }

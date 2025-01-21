@@ -37,7 +37,7 @@ func (a *NdisApi) SendPacketToMstcp(packet *EtherRequest) error {
 		uint32(unsafe.Sizeof(EtherRequest{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -50,7 +50,7 @@ func (a *NdisApi) SendPacketToAdapter(packet *EtherRequest) error {
 		uint32(unsafe.Sizeof(EtherRequest{})),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -79,7 +79,7 @@ func (a *NdisApi) SendPacketsToMstcp(packet *EtherMultiRequest) error {
 		uint32(unsafe.Sizeof(EtherMultiRequest{}))+uint32(unsafe.Sizeof(EthernetPacket{}))*(packet.PacketsNumber-1),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -92,7 +92,7 @@ func (a *NdisApi) SendPacketsToAdapter(packet *EtherMultiRequest) error {
 		uint32(unsafe.Sizeof(EtherMultiRequest{}))+uint32(unsafe.Sizeof(EthernetPacket{}))*(packet.PacketsNumber-1),
 		nil,
 		0,
-		nil, // Bytes Returned
+		&a.bytesReturned,
 		nil,
 	)
 }
@@ -106,7 +106,7 @@ func (a *NdisApi) ReadPackets(packet *EtherMultiRequest) bool {
 		size,
 		unsafe.Pointer(packet),
 		size,
-		nil,
+		&a.bytesReturned,
 		nil,
 	)
 
