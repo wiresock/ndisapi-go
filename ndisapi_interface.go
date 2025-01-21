@@ -24,9 +24,9 @@ type NdisApiInterface interface {
 	ConvertWindows2000AdapterName(adapterName string) string
 	InitializeFastIo(pFastIo *InitializeFastIOSection, dwSize uint32) bool
 	AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint32) bool
-	ReadPacketsUnsorted(packets []*IntermediateBuffer, dwPacketsNum uint32, pdwPacketsSuccess *uint32) bool
-	SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, dwPacketsNum uint32, pdwPacketSuccess *uint32) bool
-	SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, dwPacketsNum uint32, pdwPacketSuccess *uint32) bool
+	ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetsSuccess *uint32) bool
+	SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool
+	SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool
 	SendPacketToMstcp(packet *EtherRequest) error
 	SendPacketToAdapter(packet *EtherRequest) error
 	ReadPacket(packet *EtherRequest) bool
