@@ -100,7 +100,7 @@ func NewSocksLocalRouter(api *A.NdisApi, debug bool) (*SocksLocalRouter, error) 
 	}
 
 	// Create packet filter
-	filter, err := D.NewQueuedPacketFilter(api, socksLocalRouter.adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
+	filter, err := D.NewQueuedPacketFilter(ctx, api, socksLocalRouter.adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
 		packet := gopacket.NewPacket(b.Buffer[:], layers.LayerTypeEthernet, gopacket.Default)
 
 		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
@@ -382,7 +382,7 @@ func (s *SocksLocalRouter) Stop() error {
 	}
 	windows.CloseHandle(s.ifNotifyHandle)
 
-	s.filter.StopFilter()
+	s.filter.Close()
 
 	for _, server := range s.proxyServers {
 		server.Stop()
@@ -607,7 +607,7 @@ func (s *SocksLocalRouter) ipInterfaceChangedCallback(callerContext uintptr, row
 	s.defaultAdapter = selectedAdapter
 
 	go func() {
-		s.filter.StopFilter()
+		s.filter.Close()
 		if s.updateNetworkConfiguration() {
 			s.filter.StartFilter(int(s.ifIndex))
 		}

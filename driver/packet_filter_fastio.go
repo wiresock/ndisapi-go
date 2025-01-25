@@ -25,6 +25,7 @@ type fastIOStorageType [fastIOSize]byte
 
 type FastIOPacketFilter struct {
 	*A.NdisApi
+	ctx context.Context
 
 	adapters *A.TcpAdapterList
 
@@ -42,13 +43,14 @@ type FastIOPacketFilter struct {
 	fastIO              []fastIOStorageType // shared fast i/o memory
 
 	wg     sync.WaitGroup
-	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func NewFastIOPacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction, waitOnPool bool) (*FastIOPacketFilter, error) {
+func NewFastIOPacketFilter(ctx context.Context, api *A.NdisApi, adapters *A.TcpAdapterList, in, out func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction, waitOnPool bool) (*FastIOPacketFilter, error) {
 	filter := &FastIOPacketFilter{
-		NdisApi:  api,
+		NdisApi: api,
+		ctx:     ctx,
+
 		adapters: adapters,
 
 		waitOnPoll:           waitOnPool,
@@ -132,10 +134,6 @@ func (f *FastIOPacketFilter) initializeNetworkInterfaces() error {
 	return nil
 }
 
-func (f *FastIOPacketFilter) Close() {
-	f.networkInterfaces[f.adapter].Close()
-}
-
 func (f *FastIOPacketFilter) Reconfigure() error {
 	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
@@ -157,140 +155,148 @@ func (f *FastIOPacketFilter) StartFilter(adapterIdx int) error {
 	f.filterState = FilterStateStarting
 	f.adapter = adapterIdx
 
-	f.ctx, f.cancel = context.WithCancel(context.Background())
-
 	if err := f.initFilter(); err != nil {
 		return err
 	}
+
+	ctx, cancel := context.WithCancel(f.ctx)
+	f.cancel = cancel
 
 	f.filterState = FilterStateStarting
 
 	// Start the working thread
 	f.wg.Add(1)
-	go f.filterWorkingThread()
+	go f.filterWorkingThread(ctx)
 
 	return nil
 }
 
-func (f *FastIOPacketFilter) StopFilter() error {
+func (f *FastIOPacketFilter) Close() error {
 	if f.filterState != FilterStateRunning {
 		return errors.New("filter is not running")
 	}
 
 	f.filterState = FilterStateStopping
-
+	f.networkInterfaces[f.adapter].Close()
 	f.cancel()
-
 	f.wg.Wait()
 	f.filterState = FilterStateStopped
-
-	f.Close()
-
 	return nil
 }
 
-func (f *FastIOPacketFilter) filterWorkingThread() {
+func (f *FastIOPacketFilter) filterWorkingThread(ctx context.Context) {
 	defer f.wg.Done()
 
 	f.filterState = FilterStateRunning
-	var sentSuccess uint32
-	var fastIOPacketsSuccess uint32
-
-	writeAdapterRequest := (*[A.FastIOMaximumPacketBlock]*A.IntermediateBuffer)(unsafe.Pointer(&f.writeAdapterRequest[0]))[:]
-	writeMstcpRequest := (*[A.FastIOMaximumPacketBlock]*A.IntermediateBuffer)(unsafe.Pointer(&f.writeMstcpRequest[0]))[:]
-
-	fastIOSection := []*A.FastIOSection{
-		(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[0])),
-		(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[1])),
-		(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[2])),
-		(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[3])),
-	}
-
 	for {
-		if f.filterState != FilterStateRunning {
+		select {
+		case <-f.ctx.Done():
 			return
-		}
+		default:
+			var sentSuccess uint32
+			var fastIOPacketsSuccess uint32
 
-		for _, i := range fastIOSection {
-			if join := atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion))); join > 0 {
-				atomic.StoreUint32(&i.FastIOHeader.ReadInProgressFlag, 1)
+			writeAdapterRequest := (*[A.FastIOMaximumPacketBlock]*A.IntermediateBuffer)(unsafe.Pointer(&f.writeAdapterRequest[0]))[:]
+			writeMstcpRequest := (*[A.FastIOMaximumPacketBlock]*A.IntermediateBuffer)(unsafe.Pointer(&f.writeMstcpRequest[0]))[:]
 
-				writeUnion := atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
-
-				currentPacketsSuccess := (*A.FastIOWriteUnion)(unsafe.Pointer(&writeUnion)).GetNumberOfPackets()
-
-				// copy packets and reset section
-				f.packetBuffer[fastIOPacketsSuccess] = i.FastIOPackets[currentPacketsSuccess-1]
-
-				writeUnion = atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
-
-				for (*A.FastIOWriteUnion)(unsafe.Pointer(&writeUnion)).GetWriteInProgressFlag() != 0 {
-					writeUnion = atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
-				}
-				f.packetBuffer[fastIOPacketsSuccess] = i.FastIOPackets[currentPacketsSuccess-1]
-
-				if currentPacketsSuccess < i.FastIOHeader.FastIOWriteUnion.GetNumberOfPackets() {
-					currentPacketsSuccess = i.FastIOHeader.FastIOWriteUnion.GetNumberOfPackets()
-					f.packetBuffer[fastIOPacketsSuccess] = i.FastIOPackets[currentPacketsSuccess-1]
-				}
-
-				atomic.StoreUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)), 0)
-				atomic.StoreUint32(&i.FastIOHeader.ReadInProgressFlag, 0)
-
-				fastIOPacketsSuccess += uint32(currentPacketsSuccess)
-			}
-		}
-
-		var sendToAdapterNum uint32
-		var sendToMstcpNum uint32
-
-		for i := uint32(0); i < fastIOPacketsSuccess; i++ {
-			packetAction := A.FilterActionPass
-
-			if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
-				if f.filterOutgoingPacket != nil {
-					packetAction = f.filterOutgoingPacket(f.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &f.packetBuffer[i])
-				}
-			} else {
-				if f.filterIncomingPacket != nil {
-					packetAction = f.filterIncomingPacket(f.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &f.packetBuffer[i])
-				}
+			fastIOSection := []*A.FastIOSection{
+				(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[0])),
+				(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[1])),
+				(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[2])),
+				(*A.FastIOSection)(unsafe.Pointer(&f.fastIO[3])),
 			}
 
-			// Place packet back into the flow if was allowed to
-			if packetAction == A.FilterActionPass {
-				if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
-					writeAdapterRequest[sendToAdapterNum] = &f.packetBuffer[i]
-					sendToAdapterNum++
-				} else {
-					writeMstcpRequest[sendToMstcpNum] = &f.packetBuffer[i]
-					sendToMstcpNum++
+			for {
+				if f.filterState != FilterStateRunning {
+					return
 				}
-			} else if packetAction == A.FilterActionRedirect {
-				if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_RECEIVE {
-					writeAdapterRequest[sendToAdapterNum] = &f.packetBuffer[i]
-					sendToAdapterNum++
-				} else {
-					writeMstcpRequest[sendToMstcpNum] = &f.packetBuffer[i]
-					sendToMstcpNum++
+
+				for _, i := range fastIOSection {
+					if join := atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion))); join > 0 {
+						atomic.StoreUint32(&i.FastIOHeader.ReadInProgressFlag, 1)
+
+						writeUnion := atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
+
+						currentPacketsSuccess := (*A.FastIOWriteUnion)(unsafe.Pointer(&writeUnion)).GetNumberOfPackets()
+
+						// Copy packets and reset section
+						copy(f.packetBuffer[fastIOPacketsSuccess:], i.FastIOPackets[:currentPacketsSuccess-1])
+
+						// For the last packet(s) wait for the write completion if in progress
+						writeUnion = atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
+
+						for (*A.FastIOWriteUnion)(unsafe.Pointer(&writeUnion)).GetWriteInProgressFlag() != 0 {
+							writeUnion = atomic.LoadUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)))
+						}
+
+						// Copy the last packet(s)
+						copy(f.packetBuffer[fastIOPacketsSuccess+uint32(currentPacketsSuccess)-1:], i.FastIOPackets[currentPacketsSuccess-1:currentPacketsSuccess])
+
+						if currentPacketsSuccess < i.FastIOHeader.FastIOWriteUnion.GetNumberOfPackets() {
+							currentPacketsSuccess = i.FastIOHeader.FastIOWriteUnion.GetNumberOfPackets()
+							copy(f.packetBuffer[fastIOPacketsSuccess+uint32(currentPacketsSuccess)-1:], i.FastIOPackets[currentPacketsSuccess-1:currentPacketsSuccess])
+						}
+
+						atomic.StoreUint32((*uint32)(unsafe.Pointer(&i.FastIOHeader.FastIOWriteUnion)), 0)
+						atomic.StoreUint32(&i.FastIOHeader.ReadInProgressFlag, 0)
+
+						fastIOPacketsSuccess += uint32(currentPacketsSuccess)
+					}
 				}
+				fmt.Println(fastIOPacketsSuccess)
+
+				var sendToAdapterNum uint32
+				var sendToMstcpNum uint32
+
+				for i := uint32(0); i < fastIOPacketsSuccess; i++ {
+					packetAction := A.FilterActionPass
+
+					if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
+						if f.filterOutgoingPacket != nil {
+							packetAction = f.filterOutgoingPacket(f.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &f.packetBuffer[i])
+						}
+					} else {
+						if f.filterIncomingPacket != nil {
+							packetAction = f.filterIncomingPacket(f.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &f.packetBuffer[i])
+						}
+					}
+
+					// Place packet back into the flow if was allowed to
+					if packetAction == A.FilterActionPass {
+						if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
+							writeAdapterRequest[sendToAdapterNum] = &f.packetBuffer[i]
+							sendToAdapterNum++
+						} else {
+							writeMstcpRequest[sendToMstcpNum] = &f.packetBuffer[i]
+							sendToMstcpNum++
+						}
+					} else if packetAction == A.FilterActionRedirect {
+						if f.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_RECEIVE {
+							writeAdapterRequest[sendToAdapterNum] = &f.packetBuffer[i]
+							sendToAdapterNum++
+						} else {
+							writeMstcpRequest[sendToMstcpNum] = &f.packetBuffer[i]
+							sendToMstcpNum++
+						}
+					}
+				}
+
+				if sendToAdapterNum > 0 {
+					f.SendPacketsToAdaptersUnsorted(writeAdapterRequest, sendToAdapterNum, &sentSuccess)
+				}
+
+				if sendToMstcpNum > 0 {
+					f.SendPacketsToMstcpUnsorted(writeMstcpRequest, sendToMstcpNum, &sentSuccess)
+				}
+
+				if fastIOPacketsSuccess == 0 {
+					f.networkInterfaces[f.adapter].WaitEvent(windows.INFINITE)
+					f.networkInterfaces[f.adapter].ResetEvent()
+				}
+
+				fastIOPacketsSuccess = 0
 			}
 		}
-
-		if sendToAdapterNum > 0 {
-			f.SendPacketsToAdaptersUnsorted(writeAdapterRequest, sendToAdapterNum, &sentSuccess)
-		}
-
-		if sendToMstcpNum > 0 {
-			f.SendPacketsToMstcpUnsorted(writeMstcpRequest, sendToMstcpNum, &sentSuccess)
-		}
-
-		if fastIOPacketsSuccess == 0 {
-			f.networkInterfaces[f.adapter].WaitEvent(windows.INFINITE)
-			f.networkInterfaces[f.adapter].ResetEvent()
-		}
-
-		fastIOPacketsSuccess = 0
 	}
 }
 

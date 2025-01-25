@@ -25,6 +25,10 @@ func main() {
 		return
 	}
 
+	if !api.IsDriverLoaded() {
+		log.Fatalln("windows packet filter driver is not installed")
+	}
+
 	router, err = NewSocksLocalRouter(api, true)
 	if err != nil {
 		log.Println(fmt.Errorf("Failed to create SOCKS5 Local Router instance: %v", err))

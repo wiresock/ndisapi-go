@@ -21,6 +21,7 @@ var _ PacketFilter = (*SimplePacketFilter)(nil)
 
 type SimplePacketFilter struct {
 	*A.NdisApi
+	ctx context.Context
 
 	adapters *A.TcpAdapterList
 
@@ -30,19 +31,19 @@ type SimplePacketFilter struct {
 	networkInterfaces    []*N.NetworkAdapter
 	adapter              int
 
+	wg     sync.WaitGroup
+	cancel context.CancelFunc
+
 	packetBuffer []A.IntermediateBuffer
 
 	readRequest         *MultiRequestBuffer
 	writeAdapterRequest *MultiRequestBuffer
 	writeMstcpRequest   *MultiRequestBuffer
-
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
-func NewSimplePacketFilter(api *A.NdisApi, adapters *A.TcpAdapterList, in, out func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction) (*SimplePacketFilter, error) {
+func NewSimplePacketFilter(ctx context.Context, api *A.NdisApi, adapters *A.TcpAdapterList, in, out func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction) (*SimplePacketFilter, error) {
 	filter := &SimplePacketFilter{
+		ctx:      ctx,
 		NdisApi:  api,
 		adapters: adapters,
 
@@ -121,10 +122,6 @@ func (f *SimplePacketFilter) initializeNetworkInterfaces() error {
 	return nil
 }
 
-func (f *SimplePacketFilter) Close() {
-	f.networkInterfaces[f.adapter].Close()
-}
-
 func (f *SimplePacketFilter) Reconfigure() error {
 	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
@@ -146,46 +143,41 @@ func (f *SimplePacketFilter) StartFilter(adapterIdx int) error {
 	f.filterState = FilterStateStarting
 	f.adapter = adapterIdx
 
-	f.ctx, f.cancel = context.WithCancel(context.Background())
-
 	if err := f.initFilter(); err != nil {
 		return err
 	}
 
-	f.filterState = FilterStateStarting
+	ctx, cancel := context.WithCancel(f.ctx)
+	f.cancel = cancel
 
 	// Start the working thread
 	f.wg.Add(1)
-	go f.filterWorkingThread()
+	go f.filterWorkingThread(ctx)
 
 	return nil
 }
 
-func (f *SimplePacketFilter) StopFilter() error {
+func (f *SimplePacketFilter) Close() error {
 	if f.filterState != FilterStateRunning {
 		return errors.New("filter is not running")
 	}
 
 	f.filterState = FilterStateStopping
-
+	f.networkInterfaces[f.adapter].Close()
 	f.cancel()
-
 	f.wg.Wait()
 	f.filterState = FilterStateStopped
-
-	f.Close()
-
 	return nil
 }
 
-func (f *SimplePacketFilter) filterWorkingThread() {
+func (f *SimplePacketFilter) filterWorkingThread(ctx context.Context) {
 	defer f.wg.Done()
 
 	f.filterState = FilterStateRunning
 
 	for {
 		select {
-		case <-f.ctx.Done():
+		case <-ctx.Done():
 			return
 		default:
 			readRequest := (*A.EtherMultiRequest)(unsafe.Pointer(f.readRequest))
@@ -195,13 +187,13 @@ func (f *SimplePacketFilter) filterWorkingThread() {
 			for f.filterState == FilterStateRunning {
 				_, err := f.networkInterfaces[f.adapter].WaitEvent(windows.INFINITE)
 				if err != nil {
-					f.ctx.Done()
+					ctx.Done()
 					return
 				}
 
 				err = f.networkInterfaces[f.adapter].ResetEvent()
 				if err != nil {
-					f.ctx.Done()
+					ctx.Done()
 					return
 				}
 
