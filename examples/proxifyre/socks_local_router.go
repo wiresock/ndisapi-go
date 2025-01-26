@@ -64,7 +64,7 @@ type SocksLocalRouter struct {
 	processLookup *N.ProcessLookup // Process lookup instance.
 
 	filter       *D.QueuedPacketFilter // Packet filter instance.
-	staticFilter *D.StaticFilter       // Static filter instance.
+	staticFilter *D.StaticFilters      // Static filter instance.
 
 	isActive bool // Boolean to track the active status of the router.
 }
@@ -100,7 +100,7 @@ func NewSocksLocalRouter(api *A.NdisApi, debug bool) (*SocksLocalRouter, error) 
 	}
 
 	// Create packet filter
-	filter, err := D.NewQueuedPacketFilter(api, socksLocalRouter.adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
+	filter, err := D.NewQueuedPacketFilter(ctx, api, socksLocalRouter.adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
 		packet := gopacket.NewPacket(b.Buffer[:], layers.LayerTypeEthernet, gopacket.Default)
 
 		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
@@ -300,25 +300,20 @@ func NewSocksLocalRouter(api *A.NdisApi, debug bool) (*SocksLocalRouter, error) 
 
 	socksLocalRouter.filter = filter
 
-	// Set up ICMP filter to pass all ICMP traffic
-	icmpFilter := D.NewFilter()
-	icmpFilter.SetAction(A.FilterActionPass)
-	icmpFilter.SetDirection(D.PacketDirectionBoth)
-	icmpFilter.SetProtocol(1) // ICMP protocol
-
 	// Get static filter and add ICMP filter
-	staticFilter, err := D.GetStaticFilter(api, A.FilterActionRedirect)
+	staticFilter, err := D.NewStaticFilters(api, true, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get static filter: %v", err)
 	}
 
 	// Add the ICMP filter to the static filters list and apply all filters
-	staticFilter.AddFilter(icmpFilter)
-
-	// Apply static filter
-	if err := staticFilter.Apply(); err != nil {
-		return nil, fmt.Errorf("failed to apply static filter: %v", err)
-	}
+	staticFilter.AddFilterBack(&D.Filter{
+		Action:             A.FilterActionPass,
+		Direction:          D.PacketDirectionBoth,
+		SourceAddress:      net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		DestinationAddress: net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		Protocol:           1, // ICMP protocol
+	})
 
 	socksLocalRouter.staticFilter = staticFilter
 
@@ -329,7 +324,7 @@ func NewSocksLocalRouter(api *A.NdisApi, debug bool) (*SocksLocalRouter, error) 
 func (s *SocksLocalRouter) Close() error {
 	s.Stop()
 	if s.staticFilter != nil {
-		s.staticFilter.Reset()
+		s.staticFilter.Close()
 	}
 	return nil
 }
@@ -387,7 +382,7 @@ func (s *SocksLocalRouter) Stop() error {
 	}
 	windows.CloseHandle(s.ifNotifyHandle)
 
-	s.filter.StopFilter()
+	s.filter.Close()
 
 	for _, server := range s.proxyServers {
 		server.Stop()
@@ -421,51 +416,41 @@ func (s *SocksLocalRouter) AddSocks5Proxy(endpoint *string) (int, error) {
 	// These filters are used to decide which packets to pass or drop
 	// They are configured to match packets based on their source/destination IP and port numbers
 	// and their protocol (TCP or UDP)
-	socks5TcpProxyFilterOut := D.NewFilter().
-		SetDestAddress(endpointIP.IP).
-		SetDestPort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
-		SetAction(A.FilterActionPass).
-		SetDirection(D.PacketDirectionOut).
-		SetProtocol(syscall.IPPROTO_TCP)
+	s.staticFilter.AddFilterBack(&D.Filter{
+		Action:             A.FilterActionPass,
+		Direction:          D.PacketDirectionOut,
+		SourceAddress:      net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		DestinationAddress: net.IPNet{IP: endpointIP.IP, Mask: net.CIDRMask(32, 32)},
+		Protocol:           syscall.IPPROTO_TCP,
+		DestinationPort:    [2]uint16{uint16(endpointPort), uint16(endpointPort)},
+	})
 
-	socks5TcpProxyFilterIn := D.NewFilter().
-		SetSourceAddress(endpointIP.IP).
-		SetSourcePort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
-		SetAction(A.FilterActionPass).
-		SetDirection(D.PacketDirectionIn).
-		SetProtocol(syscall.IPPROTO_TCP)
+	s.staticFilter.AddFilterBack(&D.Filter{
+		Action:             A.FilterActionPass,
+		Direction:          D.PacketDirectionIn,
+		SourceAddress:      net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		DestinationAddress: net.IPNet{IP: endpointIP.IP, Mask: net.CIDRMask(32, 32)},
+		Protocol:           syscall.IPPROTO_TCP,
+		SourcePort:         [2]uint16{uint16(endpointPort), uint16(endpointPort)},
+	})
 
-	socks5UdpProxyFilterOut := D.NewFilter().
-		SetDestAddress(endpointIP.IP).
-		SetDestPort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
-		SetAction(A.FilterActionPass).
-		SetDirection(D.PacketDirectionOut).
-		SetProtocol(syscall.IPPROTO_UDP)
+	s.staticFilter.AddFilterBack(&D.Filter{
+		Action:             A.FilterActionPass,
+		Direction:          D.PacketDirectionOut,
+		SourceAddress:      net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		DestinationAddress: net.IPNet{IP: endpointIP.IP, Mask: net.CIDRMask(32, 32)},
+		Protocol:           syscall.IPPROTO_UDP,
+		DestinationPort:    [2]uint16{uint16(endpointPort), uint16(endpointPort)},
+	})
 
-	socks5UdpProxyFilterIn := D.NewFilter().
-		SetSourceAddress(endpointIP.IP).
-		SetSourcePort([2]uint16{uint16(endpointPort), uint16(endpointPort)}).
-		SetAction(A.FilterActionPass).
-		SetDirection(D.PacketDirectionIn).
-		SetProtocol(syscall.IPPROTO_UDP)
-
-	// Get static filter and add SOCKS5 filters
-	staticFilter, err := D.GetStaticFilter(s.NdisApi, A.FilterActionRedirect)
-	if err != nil {
-		return -1, fmt.Errorf("failed to get static filter: %v", err)
-	}
-
-	// Add the filters to a filter list
-	// Apply all the filters to the network traffic
-	staticFilter.AddFilter(socks5TcpProxyFilterOut)
-	staticFilter.AddFilter(socks5TcpProxyFilterIn)
-	staticFilter.AddFilter(socks5UdpProxyFilterOut)
-	staticFilter.AddFilter(socks5UdpProxyFilterIn)
-
-	// Apply static filter
-	if err := staticFilter.Apply(); err != nil {
-		return -1, fmt.Errorf("failed to apply static filter: %v", err)
-	}
+	s.staticFilter.AddFilterBack(&D.Filter{
+		Action:             A.FilterActionPass,
+		Direction:          D.PacketDirectionIn,
+		SourceAddress:      net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		DestinationAddress: net.IPNet{IP: endpointIP.IP, Mask: net.CIDRMask(32, 32)},
+		Protocol:           syscall.IPPROTO_UDP,
+		SourcePort:         [2]uint16{uint16(endpointPort), uint16(endpointPort)},
+	})
 
 	// Create and add new transparent proxy
 	transparentProxy := NewTransparentProxy(0, dialer,
@@ -622,7 +607,7 @@ func (s *SocksLocalRouter) ipInterfaceChangedCallback(callerContext uintptr, row
 	s.defaultAdapter = selectedAdapter
 
 	go func() {
-		s.filter.StopFilter()
+		s.filter.Close()
 		if s.updateNetworkConfiguration() {
 			s.filter.StartFilter(int(s.ifIndex))
 		}

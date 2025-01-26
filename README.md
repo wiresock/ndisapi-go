@@ -19,7 +19,7 @@ A Go library providing a comprehensive user-mode interface to the Windows Packet
 ## Requirements
 
 - **Operating System**: Windows 7 or later (32-bit or 64-bit)
-- **Go Version**: Go 1.15 or later
+- **Go Version**: Go 1.18 or later
 - **Windows Packet Filter Driver**: The driver must be installed on the system.
 - **Permissions**: Administrator privileges are required to interact with network drivers and interfaces.
 
@@ -38,6 +38,113 @@ A Go library providing a comprehensive user-mode interface to the Windows Packet
    ```sh
    go get github.com/wiresock/ndisapi-go
    ```
+
+## Usage
+```go
+package main
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/wiresock/ndisapi-go"
+	"github.com/wiresock/ndisapi-go/driver"
+)
+
+func main() {
+	api, err := ndisapi.NewNdisApi()
+	if err != nil {
+		log.Panic(fmt.Errorf("failed to create NDIS API instance: %v", err))
+	}
+	defer api.Close()
+	if !api.IsDriverLoaded() {
+		log.Fatalf("windows packet filter driver is not installed")
+	}
+	adapters, err := api.GetTcpipBoundAdaptersInfo()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	// Get static filter and add ICMP filter
+	staticFilter, err := driver.NewStaticFilters(api, true, true)
+	if err != nil {
+		log.Panic(fmt.Errorf("failed to get static filter: %v", err))
+	}
+
+	adapterIndex := getInputs(api, adapters)
+
+	ctx := context.Background()
+	filter, err := driver.NewQueuedPacketFilter(
+		ctx,
+		api,
+		adapters,
+		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) ndisapi.FilterAction {
+			// Modify incoming packets here
+
+			return ndisapi.FilterActionPass
+		},
+		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) ndisapi.FilterAction {
+			// Modify outgoing packets here
+
+			return ndisapi.FilterActionPass
+		})
+	if err != nil {
+		log.Panic(fmt.Errorf("failed to create queued_packet_filter: %v", err))
+	}
+
+	// Allocate a packet filter
+	staticFilter.AddFilterBack(&driver.Filter{
+		AdapterHandle:      adapters.AdapterHandle[adapterIndex],
+		Action:             ndisapi.FilterActionPass,
+		SourceAddress:      net.IPNet{IP: net.ParseIP("192.168.1.100"), Mask: net.CIDRMask(0, 32)},
+	})
+
+	fmt.Printf("\n\nPacket filtering is started...\nPress Ctrl+C to stop.\n\n")
+	if err := filter.StartFilter(adapterIndex); err != nil {
+		log.Panic(err)
+	}
+	defer filter.Close()
+	defer staticFilter.Close()
+	{
+		osSignals := make(chan os.Signal, 1)
+		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
+		<-osSignals
+	}
+}
+
+func getInputs(api *ndisapi.NdisApi, adapters *ndisapi.TcpAdapterList) int {
+	for i := 0; i < int(adapters.AdapterCount); i++ {
+		adapterName := api.ConvertWindows2000AdapterName(string(adapters.AdapterNameList[i][:]))
+		fmt.Println(i, "->", adapterName)
+	}
+
+	fmt.Print("\nEnter the adapter index: ")
+	reader := bufio.NewReader(os.Stdin)
+	adapterIndexStr, err := reader.ReadString('\n')
+	if err != nil {
+		log.Panic(fmt.Errorf("failed to read adapter index: %v", err))
+	}
+	adapterIndexStr = strings.TrimSpace(adapterIndexStr)
+	adapterIndex, err := strconv.Atoi(adapterIndexStr)
+	if err != nil {
+		log.Panic(fmt.Errorf("invalid adapter index: %v", err))
+	}
+
+	if adapterIndex < 0 || adapterIndex >= int(adapters.AdapterCount) {
+		log.Panic(fmt.Errorf("invalid adapter index"))
+	}
+
+	return adapterIndex
+}
+```
 
 ## Documentation
 

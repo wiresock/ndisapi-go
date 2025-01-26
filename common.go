@@ -9,9 +9,9 @@ import (
 
 // common constants
 const (
-	NDISRD_VERSION       = 0x04033000
+	NDISRD_VERSION       = 0x06013000
 	NDISRD_MAJOR_VERSION = 0x0003
-	NDISRD_MINOR_VERSION = 0x0403
+	NDISRD_MINOR_VERSION = 0x0601
 
 	// Common strings set
 	DRIVER_NAME     = "NDISRD"

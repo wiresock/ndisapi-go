@@ -42,7 +42,7 @@ var (
 	adapterIndex int    = 0
 	localPort    uint16 = 9000
 	appName      string = "firefox"
-	endpoint     string = "127.0.0.1:11908"
+	endpoint     string = "127.0.0.1:8080"
 	username     string = ""
 	password     string = ""
 )
@@ -96,7 +96,7 @@ func main() {
 	})
 	defer localProxy.Stop()
 
-	filter, err := D.NewSimplePacketFilter(api, adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
+	filter, err := D.NewSimplePacketFilter(ctx, api, adapters, nil, func(handle A.Handle, b *A.IntermediateBuffer) A.FilterAction {
 		port := localProxy.GetLocalProxyPort()
 		packet := gopacket.NewPacket(b.Buffer[:], layers.LayerTypeEthernet, gopacket.Default)
 
@@ -133,12 +133,11 @@ func main() {
 
 				mu.Lock()
 				if _, loaded := connections[connName]; loaded {
-					redirected = true
 				} else {
 					connections[connName] = tcp.DstPort
-					redirected = true
 				}
 				mu.Unlock()
+				redirected = true
 			}
 		} else {
 			connName := netip.AddrPortFrom(netip.AddrFrom4([4]byte(ip.DstIP)), uint16(tcp.SrcPort)).String()
@@ -212,7 +211,7 @@ func main() {
 	}
 
 	filter.StartFilter(adapterIndex)
-	defer filter.StopFilter()
+	defer filter.Close()
 
 	localProxy.Start(ctx)
 	{
@@ -257,7 +256,6 @@ func getUserInput(adapters *A.TcpAdapterList) error {
 	if adapterIndex < 0 || adapterIndex >= int(adapters.AdapterCount) {
 		return fmt.Errorf("Invalid adapter index")
 	}
-	return nil
 
 	for {
 		fmt.Print("\nEnter the application name: ")

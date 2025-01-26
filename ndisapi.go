@@ -32,13 +32,14 @@ const (
 	OID_GEN_CURRENT_PACKET_FILTER = 0x0001010E
 )
 
+var _ NdisApiInterface = (*NdisApi)(nil)
+
 // NdisApi represents the NDISAPI driver interface.
 type NdisApi struct {
-	overlapped    windows.Overlapped
-	bytesReturned uint32
-
-	fileHandle           windows.Handle
-	isLoadedSuccessfully bool
+	overlapped     windows.Overlapped
+	fileHandle     windows.Handle
+	isDriverLoaded bool
+	bytesReturned  uint32
 }
 
 // NewNdisApi initializes a new instance of NdisApi.
@@ -61,9 +62,12 @@ func NewNdisApi() (*NdisApi, error) {
 		windows.FILE_ATTRIBUTE_NORMAL,
 		0,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	if err == windows.ERROR_INVALID_HANDLE {
-		overlapped.HEvent = 0
+	if fileHandle == windows.InvalidHandle {
+		isLoadSuccessfully = false
 	} else {
 		overlapped.HEvent, err = windows.CreateEvent(nil, 0, 0, nil)
 		if err == nil {
@@ -72,11 +76,9 @@ func NewNdisApi() (*NdisApi, error) {
 	}
 
 	ndisApi := &NdisApi{
-		overlapped:    overlapped,
-		bytesReturned: 0,
-
-		fileHandle:           fileHandle,
-		isLoadedSuccessfully: isLoadSuccessfully,
+		overlapped:     overlapped,
+		fileHandle:     fileHandle,
+		isDriverLoaded: isLoadSuccessfully,
 	}
 
 	return ndisApi, nil
@@ -95,7 +97,12 @@ func (a *NdisApi) Close() {
 
 // IsDriverLoaded checks if the NDISAPI driver is loaded successfully.
 func (a *NdisApi) IsDriverLoaded() bool {
-	return a.isLoadedSuccessfully
+	return a.isDriverLoaded
+}
+
+// GetBytesReturned retrieves the number of bytes returned by the last DeviceIoControl call.
+func (a *NdisApi) GetBytesReturned() uint32 {
+	return a.bytesReturned
 }
 
 // DeviceIoControl sends a control code directly to the NDISAPI driver.
@@ -114,4 +121,38 @@ func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint
 		sizeOut,
 		SizeRet,
 		overlapped)
+}
+
+// GetVersion retrieves the NDISAPI driver version.
+func (a *NdisApi) GetVersion() (uint32, error) {
+	var nDriverAPIVersion uint32 = 0xFFFFFFFF
+
+	err := a.DeviceIoControl(
+		IOCTL_NDISRD_GET_VERSION,
+		unsafe.Pointer(&nDriverAPIVersion),
+		uint32(unsafe.Sizeof(nDriverAPIVersion)),
+		unsafe.Pointer(&nDriverAPIVersion),
+		uint32(unsafe.Sizeof(nDriverAPIVersion)),
+		nil,
+		nil,
+	)
+
+	if err != nil {
+		return nDriverAPIVersion, err
+	}
+
+	return nDriverAPIVersion, nil
+}
+
+// GetIntermediateBufferPoolSize retrieves the effective size of the Windows Packet Filter internal intermediate buffer pool.
+func (a *NdisApi) GetIntermediateBufferPoolSize(size uint32) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_QUERY_IB_POOL_SIZE,
+		unsafe.Pointer(&size),
+		uint32(unsafe.Sizeof(size)),
+		unsafe.Pointer(&size),
+		uint32(unsafe.Sizeof(size)),
+		nil,
+		nil,
+	)
 }

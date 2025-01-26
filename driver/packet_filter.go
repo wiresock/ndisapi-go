@@ -21,8 +21,7 @@ const (
 
 type PacketFilter interface {
 	StartFilter(adapterIdx int) error
-	StopFilter() error
-	Close()
+	Close() error
 	Reconfigure() error
 	GetFilterState() FilterState
 }

@@ -29,7 +29,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	api, err := A.NewNdisApi()
@@ -38,6 +38,10 @@ func main() {
 		return
 	}
 	defer api.Close()
+
+	if !api.IsDriverLoaded() {
+		log.Fatalln("windows packet filter driver is not installed")
+	}
 
 	// Get adapter information
 	adapters, err := api.GetTcpipBoundAdaptersInfo()
@@ -58,6 +62,7 @@ func main() {
 	w.WriteFileHeader(A.MAX_ETHER_FRAME, layers.LinkTypeEthernet) // Adjust link type as needed
 
 	filter, err := D.NewFastIOPacketFilter(
+		ctx,
 		api,
 		adapters,
 		func(handle A.Handle, buffer *A.IntermediateBuffer) A.FilterAction {
@@ -97,7 +102,7 @@ func main() {
 	if err := filter.StartFilter(adapterIndex); err != nil {
 		log.Panic(err)
 	}
-	defer filter.StopFilter()
+	defer filter.Close()
 
 	{
 		osSignals := make(chan os.Signal, 1)
