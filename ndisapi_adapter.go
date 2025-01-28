@@ -101,7 +101,6 @@ func (a *NdisApi) FlushAdapterPacketQueue(adapter Handle) error {
 	)
 }
 
-
 // GetAdapterPacketQueueSize retrieves the size of the packet queue for the specified network adapter.
 func (a *NdisApi) GetAdapterPacketQueueSize(adapter Handle, size *uint32) error {
 	return a.DeviceIoControl(

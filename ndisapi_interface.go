@@ -15,6 +15,18 @@ type NdisApiInterface interface {
 	Close()
 	GetVersion() (uint32, error)
 	GetIntermediateBufferPoolSize(size uint32) error
+	NdisApiAdapter
+	NdisApiFastIO
+	NdisApiIO
+	NdisApiStaticFilters
+	IsNdiswanInterfaces(adapterName, ndiswanName string) bool
+	IsNdiswanIP(adapterName string) bool
+	IsNdiswanIPv6(adapterName string) bool
+	IsNdiswanBh(adapterName string) bool
+	IsWindows10OrGreater() bool
+}
+
+type NdisApiAdapter interface {
 	GetTcpipBoundAdaptersInfo() (*TcpAdapterList, error)
 	SetAdapterMode(currentMode *AdapterMode) error
 	GetAdapterMode(currentMode *AdapterMode) error
@@ -23,17 +35,26 @@ type NdisApiInterface interface {
 	SetPacketEvent(adapter Handle, win32Event windows.Handle) error
 	SetAdapterListChangeEvent(win32Event windows.Handle) error
 	ConvertWindows2000AdapterName(adapterName string) string
+}
+
+type NdisApiFastIO interface {
 	InitializeFastIo(pFastIo *InitializeFastIOSection, dwSize uint32) bool
 	AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint32) bool
 	ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetsSuccess *uint32) bool
 	SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool
 	SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool
+}
+
+type NdisApiIO interface {
 	SendPacketToMstcp(packet *EtherRequest) error
 	SendPacketToAdapter(packet *EtherRequest) error
 	ReadPacket(packet *EtherRequest) bool
 	SendPacketsToMstcp(packet *EtherMultiRequest) error
 	SendPacketsToAdapter(packet *EtherMultiRequest) error
 	ReadPackets(packet *EtherMultiRequest) bool
+}
+
+type NdisApiStaticFilters interface {
 	SetPacketFilterTable(packet *StaticFilterTable) error
 	AddStaticFilterFront(filter *StaticFilter) error
 	AddStaticFilterBack(filter *StaticFilter) error
@@ -49,9 +70,4 @@ type NdisApiInterface interface {
 	DisablePacketFilterCache() error
 	EnablePacketFragmentCache() error
 	DisablePacketFragmentCache() error
-	IsNdiswanInterfaces(adapterName, ndiswanName string) bool
-	IsNdiswanIP(adapterName string) bool
-	IsNdiswanIPv6(adapterName string) bool
-	IsNdiswanBh(adapterName string) bool
-	IsWindows10OrGreater() bool
 }
