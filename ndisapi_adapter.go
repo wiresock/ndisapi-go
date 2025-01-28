@@ -133,6 +133,32 @@ func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) erro
 	)
 }
 
+// SetPacketEvent a Win32 event to be signaled when a NDISWAN adapter connect/disconnect occurs.
+func (a *NdisApi) SetWANEvent(win32Event windows.Handle) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_WAN_EVENT,
+		unsafe.Pointer(&win32Event),
+		uint32(unsafe.Sizeof(win32Event)),
+		nil,
+		0,
+		&a.bytesReturned,
+		nil,
+	)
+}
+
+// SetPacketEvent a Win32 event to be signaled when a network adapter list change occurs.
+func (a *NdisApi) SetAdapterListChangeEvent(win32Event windows.Handle) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_ADAPTER_EVENT,
+		unsafe.Pointer(&win32Event),
+		uint32(unsafe.Sizeof(win32Event)),
+		nil,
+		0,
+		&a.bytesReturned,
+		nil,
+	)
+}
+
 // ConvertWindows2000AdapterName converts an adapter's internal name to a user-friendly name on Windows 2000 and later.
 func (a *NdisApi) ConvertWindows2000AdapterName(adapterName string) string {
 	if a.IsNdiswanIP(adapterName) {

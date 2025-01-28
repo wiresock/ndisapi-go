@@ -34,7 +34,7 @@ type NetworkAdapter struct {
 }
 
 // NewNetworkAdapter constructs a NetworkAdapter instance using the provided parameters.
-func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddress, internalName, friendlyName string, medium uint32, mtu uint16) (*NetworkAdapter, error) {
+func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddress, internalName, friendlyName string, medium uint32, mtu uint16, packetEventHandle *windows.Handle) (*NetworkAdapter, error) {
 	adapter := &NetworkAdapter{
 		API:          api,
 		HardwareAddr: macAddr,
@@ -48,11 +48,15 @@ func NewNetworkAdapter(api *A.NdisApi, adapterHandle A.Handle, macAddr MacAddres
 		},
 	}
 
-	eventHandle, err := windows.CreateEvent(nil, 1, 0, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating event for adapter: %s", err.Error())
+	if packetEventHandle == nil {
+		eventHandle, err := windows.CreateEvent(nil, 1, 0, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating event for adapter: %s", err.Error())
+		}
+		adapter.packetEvent = A.NewSafeEvent(eventHandle)
+	} else {
+		adapter.packetEvent = A.NewSafeEvent(*packetEventHandle)
 	}
-	adapter.packetEvent = A.NewSafeEvent(eventHandle)
 
 	// Initialize NDISWAN type
 	if api.IsNdiswanIP(internalName) {
@@ -88,7 +92,12 @@ func (na *NetworkAdapter) ResetEvent() error {
 
 // SetPacketEvent submits the packet event into the driver.
 func (na *NetworkAdapter) SetPacketEvent() error {
-	return na.API.SetPacketEvent(na.CurrentMode.AdapterHandle, na.packetEvent.Handle)
+	return na.API.SetPacketEvent(na.CurrentMode.AdapterHandle, *na.packetEvent.Get())
+}
+
+// ResetPacketEvent submits the packet event into the driver.
+func (na *NetworkAdapter) ResetPacketEvent() error {
+	return na.API.SetPacketEvent(na.CurrentMode.AdapterHandle, 0)
 }
 
 // Close stops filtering the network interface and tries to restore its original state.

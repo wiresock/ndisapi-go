@@ -20,8 +20,17 @@ const (
 )
 
 type PacketFilter interface {
-	StartFilter(adapterIdx int) error
 	Close() error
 	Reconfigure() error
 	GetFilterState() FilterState
+}
+
+type SingleInterfacePacketFilter interface {
+	PacketFilter
+	StartFilter(adapterIdx int) error	
+}
+
+type MultiInterfacePacketFilter interface {
+	PacketFilter
+	StartFilter() error	
 }

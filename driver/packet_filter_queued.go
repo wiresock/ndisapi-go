@@ -15,6 +15,7 @@ import (
 )
 
 var _ PacketFilter = (*QueuedPacketFilter)(nil)
+var _ SingleInterfacePacketFilter = (*QueuedPacketFilter)(nil)
 
 type QueuedPacketFilter struct {
 	*A.NdisApi
@@ -175,7 +176,7 @@ func (f *QueuedPacketFilter) initializeNetworkInterfaces() error {
 
 		friendlyName := f.ConvertWindows2000AdapterName(name)
 
-		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
+		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu, nil)
 		if err != nil {
 			fmt.Println("error creating network adapter", err.Error())
 			continue

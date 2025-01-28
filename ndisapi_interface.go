@@ -21,6 +21,7 @@ type NdisApiInterface interface {
 	FlushAdapterPacketQueue(adapter Handle) error
 	GetAdapterPacketQueueSize(adapter Handle, size *uint32) error
 	SetPacketEvent(adapter Handle, win32Event windows.Handle) error
+	SetAdapterListChangeEvent(win32Event windows.Handle) error
 	ConvertWindows2000AdapterName(adapterName string) string
 	InitializeFastIo(pFastIo *InitializeFastIOSection, dwSize uint32) bool
 	AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint32) bool
