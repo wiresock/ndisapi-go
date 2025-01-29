@@ -197,7 +197,8 @@ func (f *QueuedMultiInterfacePacketFilter) Reconfigure() error {
 }
 
 // StartFilter starts packet filtering.
-func (f *QueuedMultiInterfacePacketFilter) StartFilter() error {
+// If no adapter index is provided, all available adapters will be used.
+func (f *QueuedMultiInterfacePacketFilter) StartFilter(filterAdapterIdx ...uint32) error {
 	if f.filterState != FilterStateStopped {
 		return errors.New("filter is not stopped")
 	}
@@ -206,8 +207,16 @@ func (f *QueuedMultiInterfacePacketFilter) StartFilter() error {
 
 	f.Lock()
 	if len(f.filterAdapterList) == 0 {
-		for _, adapter := range f.networkInterfaces {
+		for i, adapter := range f.networkInterfaces {
+			if len(filterAdapterIdx) > 0 {
+				for _, idx := range filterAdapterIdx {
+					if i == int(idx) {
+						f.filterAdapterList = append(f.filterAdapterList, adapter.InternalName)
+					}
+				}
+			} else {
 				f.filterAdapterList = append(f.filterAdapterList, adapter.InternalName)
+			}
 		}
 	}
 

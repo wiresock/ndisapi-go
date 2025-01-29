@@ -32,5 +32,5 @@ type SingleInterfacePacketFilter interface {
 
 type MultiInterfacePacketFilter interface {
 	PacketFilter
-	StartFilter() error	
+	StartFilter(filterAdapterIdx ...uint32) error
 }
