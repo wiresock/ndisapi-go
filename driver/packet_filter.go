@@ -27,7 +27,7 @@ type PacketFilter interface {
 
 type SingleInterfacePacketFilter interface {
 	PacketFilter
-	StartFilter(adapterIdx int) error	
+	StartFilter(adapterIdx int) error
 }
 
 type MultiInterfacePacketFilter interface {

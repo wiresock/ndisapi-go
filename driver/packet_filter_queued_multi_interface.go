@@ -207,7 +207,7 @@ func (f *QueuedMultiInterfacePacketFilter) StartFilter() error {
 	f.Lock()
 	if len(f.filterAdapterList) == 0 {
 		for _, adapter := range f.networkInterfaces {
-			f.filterAdapterList = append(f.filterAdapterList, adapter.InternalName)
+				f.filterAdapterList = append(f.filterAdapterList, adapter.InternalName)
 		}
 	}
 
@@ -298,7 +298,7 @@ func (q *QueuedMultiInterfacePacketFilter) packetRead(ctx context.Context) {
 
 			packetBlock := <-q.packetReadChan
 
-			readRequest := packetBlock.GetReadRequest()
+			readRequest := packetBlock.ReadRequest
 
 			for q.filterState == FilterStateRunning {
 				_, err := q.packetEvent.Wait(windows.INFINITE)
@@ -313,7 +313,7 @@ func (q *QueuedMultiInterfacePacketFilter) packetRead(ctx context.Context) {
 					return
 				}
 
-				if q.ReadPacketsUnsorted(readRequest, uint32(len(readRequest)), &packetBlock.packetsSuccess) && packetBlock.packetsSuccess > 0 {
+				if q.ReadPacketsUnsorted(readRequest, uint32(len(readRequest)), &packetBlock.PacketsSuccess) && packetBlock.PacketsSuccess > 0 {
 					break
 				}
 			}
@@ -337,38 +337,35 @@ func (q *QueuedMultiInterfacePacketFilter) packetProcess(ctx context.Context) {
 
 			packetBlock := <-q.packetProcessChan
 
-			writeAdapterRequest := packetBlock.GetWriteAdapterRequest()
-			writeMstcpRequest := packetBlock.GetWriteMstcpRequest()
-
-			for i := 0; i < int(packetBlock.GetPacketsSuccess()); i++ {
+			for i := 0; i < int(packetBlock.PacketsSuccess); i++ {
 				var adapterHandle *A.Handle
 				packetAction := A.FilterActionPass
 
-				if packetBlock.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
+				if packetBlock.PacketBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
 					if q.filterOutgoingPacket != nil {
-						packetAction, adapterHandle = q.filterOutgoingPacket(packetBlock.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &packetBlock.packetBuffer[i])
+						packetAction, adapterHandle = q.filterOutgoingPacket(packetBlock.PacketBuffer[i].HAdapterQLinkUnion.GetAdapter(), &packetBlock.PacketBuffer[i])
 					}
 				} else {
 					if q.filterIncomingPacket != nil {
-						packetAction, adapterHandle = q.filterIncomingPacket(packetBlock.packetBuffer[i].HAdapterQLinkUnion.GetAdapter(), &packetBlock.packetBuffer[i])
+						packetAction, adapterHandle = q.filterIncomingPacket(packetBlock.PacketBuffer[i].HAdapterQLinkUnion.GetAdapter(), &packetBlock.PacketBuffer[i])
 					}
 				}
 
 				if adapterHandle != nil {
-					packetBlock.packetBuffer[i].HAdapterQLinkUnion.SetAdapter(*adapterHandle)
+					packetBlock.PacketBuffer[i].HAdapterQLinkUnion.SetAdapter(*adapterHandle)
 				}
 
 				if packetAction == A.FilterActionPass {
-					if packetBlock.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
-						packetBlock.SetWriteAdapterRequest(append(writeAdapterRequest, &packetBlock.packetBuffer[i]))
+					if packetBlock.PacketBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_SEND {
+						packetBlock.WriteAdapterRequest = append(packetBlock.WriteAdapterRequest, &packetBlock.PacketBuffer[i])
 					} else {
-						packetBlock.SetWriteMstcpRequest(append(writeMstcpRequest, &packetBlock.packetBuffer[i]))
+						packetBlock.WriteMstcpRequest = append(packetBlock.WriteMstcpRequest, &packetBlock.PacketBuffer[i])
 					}
 				} else if packetAction == A.FilterActionRedirect {
-					if packetBlock.packetBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_RECEIVE {
-						packetBlock.SetWriteAdapterRequest(append(writeAdapterRequest, &packetBlock.packetBuffer[i]))
+					if packetBlock.PacketBuffer[i].DeviceFlags == A.PACKET_FLAG_ON_RECEIVE {
+						packetBlock.WriteAdapterRequest = append(packetBlock.WriteAdapterRequest, &packetBlock.PacketBuffer[i])
 					} else {
-						packetBlock.SetWriteMstcpRequest(append(writeMstcpRequest, &packetBlock.packetBuffer[i]))
+						packetBlock.WriteMstcpRequest = append(packetBlock.WriteMstcpRequest, &packetBlock.PacketBuffer[i])
 					}
 				}
 			}
@@ -392,11 +389,10 @@ func (q *QueuedMultiInterfacePacketFilter) packetWriteMstcp(ctx context.Context)
 
 			packetBlock := <-q.packetWriteMstcpChan
 
-			writeMstcpRequest := packetBlock.GetWriteMstcpRequest()
-			if len(writeMstcpRequest) > 0 {
+			if len(packetBlock.WriteMstcpRequest) > 0 {
 				var packetsSent uint32
-				q.SendPacketsToMstcpUnsorted(writeMstcpRequest, uint32(len(writeMstcpRequest)), &packetsSent)
-				packetBlock.ClearWriteMstcpRequest()
+				q.SendPacketsToMstcpUnsorted(packetBlock.WriteMstcpRequest, uint32(len(packetBlock.WriteMstcpRequest)), &packetsSent)
+				packetBlock.WriteMstcpRequest = packetBlock.WriteMstcpRequest[:0]
 			}
 
 			q.packetWriteAdapterChan <- packetBlock
@@ -418,11 +414,10 @@ func (q *QueuedMultiInterfacePacketFilter) packetWriteAdapter(ctx context.Contex
 
 			packetBlock := <-q.packetWriteAdapterChan
 
-			writeAdapterRequest := packetBlock.GetWriteAdapterRequest()
-			if len(writeAdapterRequest) > 0 {
+			if len(packetBlock.WriteAdapterRequest) > 0 {
 				var packetsSent uint32
-				q.SendPacketsToAdaptersUnsorted(writeAdapterRequest, uint32(len(writeAdapterRequest)), &packetsSent)
-				packetBlock.ClearWriteAdapterRequest()
+				q.SendPacketsToAdaptersUnsorted(packetBlock.WriteAdapterRequest, uint32(len(packetBlock.WriteAdapterRequest)), &packetsSent)
+				packetBlock.WriteAdapterRequest = packetBlock.WriteAdapterRequest[:0]
 			}
 
 			q.packetReadChan <- packetBlock
