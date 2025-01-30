@@ -219,6 +219,7 @@ func (f *QueuedMultiInterfacePacketFilter) StartFilter(filterAdapterIdx ...uint3
 			}
 		}
 	}
+	f.Unlock()
 
 	f.filterState = FilterStateRunning
 	f.initFilter()
