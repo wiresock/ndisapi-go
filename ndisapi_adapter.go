@@ -101,7 +101,6 @@ func (a *NdisApi) FlushAdapterPacketQueue(adapter Handle) error {
 	)
 }
 
-
 // GetAdapterPacketQueueSize retrieves the size of the packet queue for the specified network adapter.
 func (a *NdisApi) GetAdapterPacketQueueSize(adapter Handle, size *uint32) error {
 	return a.DeviceIoControl(
@@ -126,6 +125,32 @@ func (a *NdisApi) SetPacketEvent(adapter Handle, win32Event windows.Handle) erro
 		IOCTL_NDISRD_SET_EVENT,
 		unsafe.Pointer(&adapterEvent),
 		uint32(unsafe.Sizeof(adapterEvent)),
+		nil,
+		0,
+		&a.bytesReturned,
+		nil,
+	)
+}
+
+// SetPacketEvent a Win32 event to be signaled when a NDISWAN adapter connect/disconnect occurs.
+func (a *NdisApi) SetWANEvent(win32Event windows.Handle) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_WAN_EVENT,
+		unsafe.Pointer(&win32Event),
+		uint32(unsafe.Sizeof(win32Event)),
+		nil,
+		0,
+		&a.bytesReturned,
+		nil,
+	)
+}
+
+// SetPacketEvent a Win32 event to be signaled when a network adapter list change occurs.
+func (a *NdisApi) SetAdapterListChangeEvent(win32Event windows.Handle) error {
+	return a.DeviceIoControl(
+		IOCTL_NDISRD_SET_ADAPTER_EVENT,
+		unsafe.Pointer(&win32Event),
+		uint32(unsafe.Sizeof(win32Event)),
 		nil,
 		0,
 		&a.bytesReturned,

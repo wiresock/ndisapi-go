@@ -6,6 +6,8 @@ import (
 	"unsafe"
 )
 
+const UnsortedMaximumBlockNum = 16
+const UnsortedMaximumPacketBlock = 512
 const FastIOMaximumPacketBlock = 2048 * 3
 
 // FastIOWriteUnion defines the union type for fast I/O write.
@@ -128,7 +130,10 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		nil,
 	)
 
-	*packetsSuccess = request.PacketsNum
+	len := uint32(len(request.Packets))
+	copy(packets[0:len], request.Packets[0:len])
+
+	*packetsSuccess = len
 
 	return err == nil
 }

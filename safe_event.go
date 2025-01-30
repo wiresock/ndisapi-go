@@ -10,12 +10,12 @@ import (
 
 // safeObjectHandle is a wrapper class for a Windows handle
 type safeObjectHandle struct {
-	Handle windows.Handle
+	handle windows.Handle
 }
 
 // NewSafeObjectHandle creates a new SafeObjectHandle from an existing handle.
 func NewSafeObjectHandle(handle windows.Handle) *safeObjectHandle {
-	return &safeObjectHandle{Handle: handle}
+	return &safeObjectHandle{handle}
 }
 
 // Close releases the handle if valid
@@ -23,19 +23,19 @@ func (h *safeObjectHandle) Close() error {
 	if !h.IsValid() {
 		return nil
 	}
-	err := windows.CloseHandle(h.Handle)
-	h.Handle = 0
+	err := windows.CloseHandle(h.handle)
+	h.handle = 0
 	return err
 }
 
 // Get returns the stored handle value.
-func (h *safeObjectHandle) Get() windows.Handle {
-	return h.Handle
+func (h *safeObjectHandle) Get() *windows.Handle {
+	return &h.handle
 }
 
 // IsValid checks if the handle is valid (not invalid or nil).
 func (h *safeObjectHandle) IsValid() bool {
-	return h.Handle != windows.InvalidHandle && h.Handle != 0
+	return h.handle != windows.InvalidHandle && h.handle != 0
 }
 
 // SafeEvent is a wrapper for a Windows event object, extending SafeObjectHandle.
@@ -54,7 +54,7 @@ func (e *SafeEvent) Wait(milliseconds uint32) (uint32, error) {
 	if !e.IsValid() {
 		return windows.WAIT_FAILED, errors.New("invalid handle")
 	}
-	return windows.WaitForSingleObject(e.Get(), milliseconds)
+	return windows.WaitForSingleObject(e.handle, milliseconds)
 }
 
 // Signal sets the event to a signaled state.
@@ -62,7 +62,7 @@ func (e *SafeEvent) Signal() error {
 	if !e.IsValid() {
 		return errors.New("invalid handle")
 	}
-	if err := windows.SetEvent(e.Get()); err != nil {
+	if err := windows.SetEvent(e.handle); err != nil {
 		return err
 	}
 	return nil
@@ -73,7 +73,7 @@ func (e *SafeEvent) Reset() error {
 	if !e.IsValid() {
 		return errors.New("invalid handle")
 	}
-	if err := windows.ResetEvent(e.Get()); err != nil {
+	if err := windows.ResetEvent(e.handle); err != nil {
 		return err
 	}
 	return nil

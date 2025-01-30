@@ -85,6 +85,15 @@ func (h *HAdapterQLinkUnion) GetAdapter() Handle {
 func (h *HAdapterQLinkUnion) GetQLink() QLink {
 	return *(*QLink)(unsafe.Pointer(&h.data[0]))
 }
+// SetAdapter sets the adapter handle in the HAdapterQLinkUnion.
+func (h *HAdapterQLinkUnion) SetAdapter(adapter Handle) {
+	copy(h.data[:8], adapter[:])
+}
+
+// SetQLink sets the QLink in the HAdapterQLinkUnion.
+func (h *HAdapterQLinkUnion) SetQLink(qlink QLink) {
+	copy(h.data[:], qlink[:])
+}
 
 // IntermediateBuffer contains packet buffer, packet NDIS flags, WinpkFilter specific flags
 type IntermediateBuffer struct {

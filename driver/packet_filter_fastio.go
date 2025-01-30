@@ -17,6 +17,7 @@ import (
 )
 
 var _ PacketFilter = (*FastIOPacketFilter)(nil)
+var _ SingleInterfacePacketFilter = (*FastIOPacketFilter)(nil)
 
 const fastIOSize = 0x300000
 
@@ -123,7 +124,7 @@ func (f *FastIOPacketFilter) initializeNetworkInterfaces() error {
 
 		friendlyName := f.ConvertWindows2000AdapterName(name)
 
-		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu)
+		networkAdapter, err := N.NewNetworkAdapter(f.NdisApi, adapterHandle, currentAddress, name, friendlyName, medium, mtu, nil)
 		if err != nil {
 			fmt.Println("error creating network adapter", err.Error())
 			continue
