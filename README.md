@@ -44,15 +44,12 @@ A Go library providing a comprehensive user-mode interface to the Windows Packet
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/wiresock/ndisapi-go"
@@ -73,28 +70,26 @@ func main() {
 		log.Panic(err)
 	}
 
-	// Get static filter and add ICMP filter
+	// New instance of static filters
 	staticFilter, err := driver.NewStaticFilters(api, true, true)
 	if err != nil {
 		log.Panic(fmt.Errorf("failed to get static filter: %v", err))
 	}
 
-	adapterIndex := getInputs(api, adapters)
-
 	ctx := context.Background()
-	filter, err := driver.NewQueuedPacketFilter(
+	filter, err := driver.NewQueuedMultiInterfacePacketFilter(
 		ctx,
 		api,
 		adapters,
-		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) ndisapi.FilterAction {
+		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) (ndisapi.FilterAction, *ndisapi.Handle) {
 			// Modify incoming packets here
 
-			return ndisapi.FilterActionPass
+			return ndisapi.FilterActionPass, nil
 		},
-		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) ndisapi.FilterAction {
+		func(handle ndisapi.Handle, buffer *ndisapi.IntermediateBuffer) (ndisapi.FilterAction, *ndisapi.Handle) {
 			// Modify outgoing packets here
 
-			return ndisapi.FilterActionPass
+			return ndisapi.FilterActionPass, nil
 		})
 	if err != nil {
 		log.Panic(fmt.Errorf("failed to create queued_packet_filter: %v", err))
@@ -102,13 +97,13 @@ func main() {
 
 	// Allocate a packet filter
 	staticFilter.AddFilterBack(&driver.Filter{
-		AdapterHandle:      adapters.AdapterHandle[adapterIndex],
-		Action:             ndisapi.FilterActionPass,
-		SourceAddress:      net.IPNet{IP: net.ParseIP("192.168.1.100"), Mask: net.CIDRMask(0, 32)},
+		AdapterHandle: ndisapi.Handle{}, // empty handle applies to all adapters
+		Action:        ndisapi.FilterActionPass,
+		SourceAddress: net.IPNet{IP: net.ParseIP("192.168.1.100"), Mask: net.CIDRMask(0, 32)},
 	})
 
 	fmt.Printf("\n\nPacket filtering is started...\nPress Ctrl+C to stop.\n\n")
-	if err := filter.StartFilter(adapterIndex); err != nil {
+	if err := filter.StartFilter(); err != nil {
 		log.Panic(err)
 	}
 	defer filter.Close()
@@ -118,31 +113,6 @@ func main() {
 		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
 		<-osSignals
 	}
-}
-
-func getInputs(api *ndisapi.NdisApi, adapters *ndisapi.TcpAdapterList) int {
-	for i := 0; i < int(adapters.AdapterCount); i++ {
-		adapterName := api.ConvertWindows2000AdapterName(string(adapters.AdapterNameList[i][:]))
-		fmt.Println(i, "->", adapterName)
-	}
-
-	fmt.Print("\nEnter the adapter index: ")
-	reader := bufio.NewReader(os.Stdin)
-	adapterIndexStr, err := reader.ReadString('\n')
-	if err != nil {
-		log.Panic(fmt.Errorf("failed to read adapter index: %v", err))
-	}
-	adapterIndexStr = strings.TrimSpace(adapterIndexStr)
-	adapterIndex, err := strconv.Atoi(adapterIndexStr)
-	if err != nil {
-		log.Panic(fmt.Errorf("invalid adapter index: %v", err))
-	}
-
-	if adapterIndex < 0 || adapterIndex >= int(adapters.AdapterCount) {
-		log.Panic(fmt.Errorf("invalid adapter index"))
-	}
-
-	return adapterIndex
 }
 ```
 
