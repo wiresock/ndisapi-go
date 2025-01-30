@@ -7,7 +7,6 @@ require github.com/wiresock/ndisapi-go v0.0.0-00010101000000-000000000000 // rep
 require (
 	github.com/google/gopacket v1.1.19
 	github.com/wzshiming/socks5 v0.5.1
-	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/sys v0.28.0
 )
 
