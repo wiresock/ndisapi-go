@@ -2,7 +2,7 @@ module proxifyre
 
 go 1.23.2
 
-require github.com/wiresock/ndisapi-go v0.0.0-00010101000000-000000000000 // replace with the correct version
+require github.com/wiresock/ndisapi-go v1.0.1
 
 require (
 	github.com/google/gopacket v1.1.19
