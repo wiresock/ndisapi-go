@@ -32,7 +32,7 @@ var (
 	api        *A.NdisApi
 	localProxy *TransparentProxy
 
-	processLookup = N.ProcessLookup{}
+	processLookup = N.NewProcessLookup()
 
 	mu          sync.RWMutex
 	connections map[string]layers.TCPPort = make(map[string]layers.TCPPort)
