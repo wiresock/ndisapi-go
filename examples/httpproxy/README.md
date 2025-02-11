@@ -4,7 +4,7 @@ This example demonstrates how to use the Windows Packet Filter to redirect the s
 
 ## Prerequisites
 
-* Local HTTP proxy (e.g., using a proxy server running on localhost)
+* HTTP proxy server
 
 ## Usage
 
