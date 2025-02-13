@@ -380,7 +380,6 @@ func (s *SocksLocalRouter) Stop() error {
 	if err := N.CancelMibChangeNotify2(s.ifNotifyHandle); err != nil {
 		return fmt.Errorf("CancelMibChangeNotify2 failed: %v", err)
 	}
-	windows.CloseHandle(s.ifNotifyHandle)
 
 	s.filter.Close()
 
