@@ -92,7 +92,7 @@ func NewSocksLocalRouter(api *A.NdisApi, debug bool) (*SocksLocalRouter, error) 
 		tcpConnections: make(map[string]TCPPortMapping),
 		udpEndpoints:   make(map[string]UDPPortMapping),
 
-		processLookup: &N.ProcessLookup{},
+		processLookup: N.NewProcessLookup(),
 
 		adapters: adapters,
 
