@@ -33,6 +33,8 @@ type TransparentProxy struct {
 
 	udpConnections map[string]net.Conn
 	udpMutex       sync.Mutex
+
+	wg sync.WaitGroup
 }
 
 // NewTransparentProxy creates a new instance of TransparentProxy.
@@ -87,10 +89,18 @@ func (tp *TransparentProxy) Start(ctx context.Context) error {
 
 	ctx, tp.cancel = context.WithCancel(ctx)
 
-	go tp.acceptTcpConnections(ctx)
-	go tp.acceptUdpConnections(ctx)
+	tp.wg.Add(2)
+	go func() {
+		defer tp.wg.Done()
+		tp.acceptTcpConnections(ctx)
+	}()
+	go func() {
+		defer tp.wg.Done()
+		tp.acceptUdpConnections(ctx)
+	}()
 
 	<-ctx.Done()
+	tp.wg.Wait()
 
 	return nil
 }
@@ -108,6 +118,8 @@ func (tp *TransparentProxy) Stop() {
 	if tp.udpListener != nil {
 		tp.udpListener.Close()
 	}
+
+	tp.wg.Wait()
 }
 
 func (tp *TransparentProxy) acceptTcpConnections(ctx context.Context) {
