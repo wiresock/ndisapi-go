@@ -13,7 +13,7 @@ This example demonstrates how to use the Windows Packet Filter to redirect the s
 | TCP      | ✔️   | ❌   |
 | UDP      | ✔️   | ❌   |
 
-Currently, only TCP over IPv4 is supported. Future updates will include support for UDP and IPv6.
+Currently, only IPv4 is supported. Future updates will include support for IPv6.
 
 ## Usage
 Clone the repository:
@@ -45,7 +45,7 @@ ssh user@domain.com -D 8080
 
 This command will expose a SOCKS5 proxy on localhost 127.0.0.1:8080.
 
-Then run ./examples/proxifyre/main.go
+Then run:
 
 ```sh
 cd ./examples/proxifyre
@@ -71,5 +71,6 @@ cd ndisapi-go
 Build your application:
 
 ```sh
-go build ./examples/socks
+cd ./examples/proxifyre
+go build
 ```

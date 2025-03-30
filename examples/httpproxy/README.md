@@ -18,7 +18,8 @@ git clone https://github.com/wiresock/ndisapi-go.git
 
 Then run:
 ```sh
-go run .\examples\httpproxy\main.go
+cd .\examples\httpproxy\
+go run main.go
 ```
 
 You will be prompted to enter the adapter index, application name, HTTP-Proxy endpoint, username, and password. For example:
@@ -50,5 +51,6 @@ cd ndisapi-go
 Build your application:
 
 ```sh
-go build ./examples/httpproxy
+cd .\examples\httpproxy\
+go build
 ```

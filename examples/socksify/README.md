@@ -22,10 +22,11 @@ ssh user@domain.com -D 8080
 
 This command will expose a SOCKS5 proxy on localhost 127.0.0.1:8080.
 
-Then run `.\examples\socksify\main.go`:
+Then run:
 
 ```sh
-go run .\examples\socksify\main.go
+cd .\examples\socksify
+go run main.go
 ```
 
 You will be prompted to enter the adapter index, application name, SOCKS5 endpoint, username, and password. For example:
@@ -57,5 +58,6 @@ cd ndisapi-go
 Build your application:
 
 ```sh
-go build ./examples/socksify
+cd ./examples/socksify
+go run main.go
 ```
