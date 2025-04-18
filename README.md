@@ -18,7 +18,8 @@ A Go library providing a comprehensive user-mode interface to the Windows Packet
 
 ## Requirements
 
-- **Operating System**: Windows 7 or later (32-bit or 64-bit)
+- **Operating System**: Windows 10 or later (64-bit).
+  - Windows 7, 8 or 8.1 are not officially supported but should work on 64bit.
 - **Go Version**: Go 1.18 or later
 - **Windows Packet Filter Driver**: The driver must be installed on the system.
 - **Permissions**: Administrator privileges are required to interact with network drivers and interfaces.
