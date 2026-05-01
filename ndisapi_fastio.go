@@ -64,9 +64,16 @@ type InitializeFastIOParams struct {
 	DataSize uint32
 }
 
-// UnsortedReadSendRequest represents a request for unsorted read/send packets
+// UnsortedReadSendRequest represents a request for unsorted read/send packets.
+// The binary layout must match the driver's UNSORTED_READ_SEND_REQUEST structure
+// (see https://github.com/wiresock/ndisapi include/Common.h):
+//
+//	typedef struct _UNSORTED_READ_SEND_REQUEST {
+//	    PINTERMEDIATE_BUFFER* packets;
+//	    DWORD                 packets_num;
+//	} UNSORTED_READ_SEND_REQUEST;
 type UnsortedReadSendRequest struct {
-	Packets    []*IntermediateBuffer
+	Packets    **IntermediateBuffer
 	PacketsNum uint32
 }
 
@@ -114,11 +121,15 @@ func (a *NdisApi) AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint3
 
 // ReadPacketsUnsorted reads a bunch of packets from the driver packet queues without sorting by network adapter.
 func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetsSuccess *uint32) bool {
+	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+		*packetsSuccess = 0
+		return false
+	}
+
 	request := UnsortedReadSendRequest{
-		Packets:    make([]*IntermediateBuffer, packetsNum),
+		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
 		PacketsNum: packetsNum,
 	}
-	copy(request.Packets, packets[:packetsNum])
 
 	err := a.DeviceIoControl(
 		IOCTL_NDISRD_READ_PACKETS_UNSORTED,
@@ -130,21 +141,22 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		nil,
 	)
 
-	len := uint32(len(request.Packets))
-	copy(packets[0:len], request.Packets[0:len])
-
-	*packetsSuccess = len
+	*packetsSuccess = request.PacketsNum
 
 	return err == nil
 }
 
 // SendPacketsToAdaptersUnsorted sends a bunch of packets to the network adapters.
 func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool {
+	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+		*packetSuccess = 0
+		return false
+	}
+
 	request := UnsortedReadSendRequest{
-		Packets:    make([]*IntermediateBuffer, packetsNum),
+		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
 		PacketsNum: packetsNum,
 	}
-	copy(request.Packets, packets[:packetsNum])
 
 	err := a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKET_TO_ADAPTER_UNSORTED,
@@ -163,11 +175,15 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 
 // SendPacketsToMstcpUnsorted indicates a bunch of packets to the MSTCP (and other upper layer network protocols).
 func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool {
+	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+		*packetSuccess = 0
+		return false
+	}
+
 	request := UnsortedReadSendRequest{
-		Packets:    make([]*IntermediateBuffer, packetsNum),
+		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
 		PacketsNum: packetsNum,
 	}
-	copy(request.Packets, packets[:packetsNum])
 
 	err := a.DeviceIoControl(
 		IOCTL_NDISRD_SEND_PACKET_TO_MSTCP_UNSORTED,
