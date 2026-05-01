@@ -80,18 +80,19 @@ type UnsortedReadSendRequest struct {
 // Compile-time assertions that UnsortedReadSendRequest matches the driver's
 // UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
 // reintroducing a slice header or otherwise changing the field layout. Each
-// declaration assigns a fixed-length array literal to a [0]byte variable: the
-// length expression in brackets must evaluate to 0 for the array types to
-// match, so any non-zero (or out-of-range) value makes the assignment fail
-// to compile. The total struct size is additionally pinned on x64 in
-// ndisapi_fastio_layout_amd64.go (where the C compiler adds 4 bytes of
-// trailing padding); on x86 the per-field offset/size checks already cover
-// every byte because the struct has no trailing padding.
+// declaration assigns a fixed-length array literal to a same-length array
+// variable: if the lengths differ the types are incompatible and the
+// assignment fails to compile. The total struct size is additionally pinned
+// on x64 in ndisapi_fastio_layout_amd64.go (where the C compiler adds 4
+// bytes of trailing padding); on x86 the per-field offset/size checks
+// already cover every byte because the struct has no trailing padding.
+var _unsortedReadSendRequestLayout UnsortedReadSendRequest
+
 var (
-	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.Packets)]byte{}
-	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.Packets) - unsafe.Sizeof(uintptr(0))]byte{}
-	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.PacketsNum) - unsafe.Sizeof(uintptr(0))]byte{}
-	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.PacketsNum) - 4]byte{}
+	_ [0]byte                    = [unsafe.Offsetof(_unsortedReadSendRequestLayout.Packets)]byte{}
+	_ [unsafe.Sizeof(uintptr(0))]byte = [unsafe.Sizeof(_unsortedReadSendRequestLayout.Packets)]byte{}
+	_ [unsafe.Sizeof(uintptr(0))]byte = [unsafe.Offsetof(_unsortedReadSendRequestLayout.PacketsNum)]byte{}
+	_ [4]byte                    = [unsafe.Sizeof(_unsortedReadSendRequestLayout.PacketsNum)]byte{}
 )
 
 // InitializeFastIo initializes the Fast I/O shared memory section.
