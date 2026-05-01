@@ -1,4 +1,4 @@
-//go:build windows && amd64 && go1.20
+//go:build windows && amd64 && go1.21
 
 package ndisapi
 
