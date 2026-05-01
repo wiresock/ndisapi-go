@@ -11,8 +11,12 @@ import "unsafe"
 // the struct is already pointer-aligned with no trailing padding, so the
 // per-field offset/size assertions in ndisapi_fastio.go already cover every
 // byte of the struct and a separate total-size check is unnecessary.
-func init() {
-	if unsafe.Sizeof(UnsortedReadSendRequest{}) != 16 {
-		panic("UnsortedReadSendRequest has unexpected amd64 size")
-	}
-}
+//
+// A package-level var (not a composite literal) is used so that
+// unsafe.Sizeof correctly accounts for trailing struct padding on Go 1.18/1.19,
+// where unsafe.Sizeof(StructLiteral{}) may omit trailing padding in vet's
+// constant evaluator. The assignment to [16]byte catches any size mismatch at
+// compile time without subtraction (which can overflow uintptr in that same
+// vet path).
+var _unsortedReadSendRequestSizeCheck UnsortedReadSendRequest
+var _ [16]byte = [unsafe.Sizeof(_unsortedReadSendRequestSizeCheck)]byte{}
