@@ -81,14 +81,12 @@ type UnsortedReadSendRequest struct {
 // UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
 // reintroducing a slice header or otherwise changing the field layout. Each
 // declaration assigns a fixed-length array literal to a [0]byte variable: the
-// expression in brackets must equal 0 for the lengths to match, otherwise the
-// types differ and the assignment fails to compile.
-//
-// The total struct size is implicitly pinned: the offset and size of each
-// field cover every byte except trailing padding, and Go's struct alignment
-// rules add exactly the same trailing padding the C compiler would (4 bytes
-// on x64, none on x86), so the on-the-wire size always matches the driver's
-// UNSORTED_READ_SEND_REQUEST.
+// length expression in brackets must evaluate to 0 for the array types to
+// match, so any non-zero (or out-of-range) value makes the assignment fail
+// to compile. The total struct size is additionally pinned on x64 in
+// ndisapi_fastio_layout_amd64.go (where the C compiler adds 4 bytes of
+// trailing padding); on x86 the per-field offset/size checks already cover
+// every byte because the struct has no trailing padding.
 var (
 	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.Packets)]byte{}
 	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.Packets) - unsafe.Sizeof(uintptr(0))]byte{}
@@ -140,7 +138,11 @@ func (a *NdisApi) AddSecondaryFastIo(fastIo *InitializeFastIOSection, size uint3
 
 // ReadPacketsUnsorted reads a bunch of packets from the driver packet queues without sorting by network adapter.
 func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetsSuccess *uint32) bool {
-	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+	if packetsNum == 0 {
+		*packetsSuccess = 0
+		return true
+	}
+	if uint32(len(packets)) < packetsNum {
 		*packetsSuccess = 0
 		return false
 	}
@@ -165,6 +167,11 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		return false
 	}
 
+	// Clamp the driver-reported count to the requested size so callers
+	// never see a value larger than the slice they passed in.
+	if request.PacketsNum > packetsNum {
+		request.PacketsNum = packetsNum
+	}
 	*packetsSuccess = request.PacketsNum
 
 	return true
@@ -172,7 +179,11 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 
 // SendPacketsToAdaptersUnsorted sends a bunch of packets to the network adapters.
 func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool {
-	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+	if packetsNum == 0 {
+		*packetSuccess = 0
+		return true
+	}
+	if uint32(len(packets)) < packetsNum {
 		*packetSuccess = 0
 		return false
 	}
@@ -197,6 +208,9 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 		return false
 	}
 
+	if request.PacketsNum > packetsNum {
+		request.PacketsNum = packetsNum
+	}
 	*packetSuccess = request.PacketsNum
 
 	return true
@@ -204,7 +218,11 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 
 // SendPacketsToMstcpUnsorted indicates a bunch of packets to the MSTCP (and other upper layer network protocols).
 func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, packetsNum uint32, packetSuccess *uint32) bool {
-	if packetsNum == 0 || uint32(len(packets)) < packetsNum {
+	if packetsNum == 0 {
+		*packetSuccess = 0
+		return true
+	}
+	if uint32(len(packets)) < packetsNum {
 		*packetSuccess = 0
 		return false
 	}
@@ -229,6 +247,9 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, pack
 		return false
 	}
 
+	if request.PacketsNum > packetsNum {
+		request.PacketsNum = packetsNum
+	}
 	*packetSuccess = request.PacketsNum
 
 	return true
