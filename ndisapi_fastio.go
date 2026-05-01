@@ -83,8 +83,8 @@ type UnsortedReadSendRequest struct {
 // declaration assigns a fixed-length array literal to a same-length array
 // variable: if the lengths differ the types are incompatible and the
 // assignment fails to compile. The total struct size is additionally pinned
-// on x64 in ndisapi_fastio_layout_amd64.go (where the C compiler adds 4
-// bytes of trailing padding); on x86 the per-field offset/size checks
+// on windows/amd64 in ndisapi_fastio_layout_amd64.go (where the C compiler
+// adds 4 bytes of trailing padding); on x86 the per-field offset/size checks
 // already cover every byte because the struct has no trailing padding.
 var _unsortedReadSendRequestLayout UnsortedReadSendRequest
 
