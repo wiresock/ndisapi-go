@@ -66,7 +66,7 @@ type InitializeFastIOParams struct {
 
 // UnsortedReadSendRequest represents a request for unsorted read/send packets.
 // The binary layout must match the driver's UNSORTED_READ_SEND_REQUEST structure
-// (see https://github.com/wiresock/ndisapi include/Common.h):
+// (see https://github.com/wiresock/ndisapi/blob/master/include/Common.h):
 //
 //	typedef struct _UNSORTED_READ_SEND_REQUEST {
 //	    PINTERMEDIATE_BUFFER* packets;
@@ -76,6 +76,17 @@ type UnsortedReadSendRequest struct {
 	Packets    **IntermediateBuffer
 	PacketsNum uint32
 }
+
+// Compile-time assertions that UnsortedReadSendRequest matches the driver's
+// UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
+// reintroducing a slice header or otherwise changing the field layout. Each
+// expression must evaluate to 0; if it does not, the array length is negative
+// and compilation fails.
+var (
+	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.Packets)]byte{}
+	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.Packets) - unsafe.Sizeof(uintptr(0))]byte{}
+	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.PacketsNum) - unsafe.Sizeof(uintptr(0))]byte{}
+)
 
 // InitializeFastIo initializes the Fast I/O shared memory section.
 func (a *NdisApi) InitializeFastIo(fastIo *InitializeFastIOSection, size uint32) bool {
@@ -141,9 +152,14 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		nil,
 	)
 
+	if err != nil {
+		*packetsSuccess = 0
+		return false
+	}
+
 	*packetsSuccess = request.PacketsNum
 
-	return err == nil
+	return true
 }
 
 // SendPacketsToAdaptersUnsorted sends a bunch of packets to the network adapters.
@@ -168,9 +184,14 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 		nil,
 	)
 
+	if err != nil {
+		*packetSuccess = 0
+		return false
+	}
+
 	*packetSuccess = request.PacketsNum
 
-	return err == nil
+	return true
 }
 
 // SendPacketsToMstcpUnsorted indicates a bunch of packets to the MSTCP (and other upper layer network protocols).
@@ -195,7 +216,12 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, pack
 		nil,
 	)
 
+	if err != nil {
+		*packetSuccess = 0
+		return false
+	}
+
 	*packetSuccess = request.PacketsNum
 
-	return err == nil
+	return true
 }
