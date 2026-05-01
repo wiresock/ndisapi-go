@@ -1,4 +1,4 @@
-//go:build windows && amd64 && go1.19
+//go:build windows && amd64
 
 package ndisapi
 
@@ -12,10 +12,12 @@ import "unsafe"
 // per-field offset/size assertions in ndisapi_fastio.go already cover every
 // byte of the struct and a separate total-size check is unnecessary.
 //
-// Gated on go1.19+ because Go 1.18's `vet` evaluates
-// `unsafe.Sizeof(StructLiteral{})` without including trailing struct padding
-// (returns 12 instead of 16 here) and then mis-folds the resulting subtraction
-// to a negative uintptr constant, which fails vet even though the actual
-// compiled binary lays the struct out correctly.
-var _ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}) - 16]byte{}
+// A package-level variable is used here (rather than a struct literal) because
+// `go vet` in Go 1.18 and 1.19 mis-evaluates `unsafe.Sizeof(StructLiteral{})`
+// as a constant that omits trailing struct padding (returning 12 instead of 16
+// here), which would cause the subtraction below to overflow `uintptr` and
+// fail vet even though the compiled binary lays the struct out correctly.
+// Computing `Sizeof` from a typed identifier avoids that constant-folding path.
+var _unsortedReadSendRequestForSizeAssert UnsortedReadSendRequest
+var _ [0]byte = [unsafe.Sizeof(_unsortedReadSendRequestForSizeAssert) - 16]byte{}
 
