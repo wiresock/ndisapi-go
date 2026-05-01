@@ -83,14 +83,17 @@ type UnsortedReadSendRequest struct {
 // declaration assigns a fixed-length array literal to a [0]byte variable: the
 // expression in brackets must equal 0 for the lengths to match, otherwise the
 // types differ and the assignment fails to compile.
+//
+// The total struct size is implicitly pinned: the offset and size of each
+// field cover every byte except trailing padding, and Go's struct alignment
+// rules add exactly the same trailing padding the C compiler would (4 bytes
+// on x64, none on x86), so the on-the-wire size always matches the driver's
+// UNSORTED_READ_SEND_REQUEST.
 var (
 	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.Packets)]byte{}
 	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.Packets) - unsafe.Sizeof(uintptr(0))]byte{}
 	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.PacketsNum) - unsafe.Sizeof(uintptr(0))]byte{}
-	// Total size must be two pointer-sized words: one PINTERMEDIATE_BUFFER*
-	// followed by a DWORD plus any tail padding the C compiler would add to
-	// align the struct to pointer width (matches MSVC on x86 and x64).
-	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}) - 2*unsafe.Sizeof(uintptr(0))]byte{}
+	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.PacketsNum) - 4]byte{}
 )
 
 // InitializeFastIo initializes the Fast I/O shared memory section.
