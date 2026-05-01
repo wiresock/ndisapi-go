@@ -80,12 +80,17 @@ type UnsortedReadSendRequest struct {
 // Compile-time assertions that UnsortedReadSendRequest matches the driver's
 // UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
 // reintroducing a slice header or otherwise changing the field layout. Each
-// expression must evaluate to 0; if it does not, the array length is negative
-// and compilation fails.
+// declaration assigns a fixed-length array literal to a [0]byte variable: the
+// expression in brackets must equal 0 for the lengths to match, otherwise the
+// types differ and the assignment fails to compile.
 var (
 	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.Packets)]byte{}
 	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}.Packets) - unsafe.Sizeof(uintptr(0))]byte{}
 	_ [0]byte = [unsafe.Offsetof(UnsortedReadSendRequest{}.PacketsNum) - unsafe.Sizeof(uintptr(0))]byte{}
+	// Total size must be two pointer-sized words: one PINTERMEDIATE_BUFFER*
+	// followed by a DWORD plus any tail padding the C compiler would add to
+	// align the struct to pointer width (matches MSVC on x86 and x64).
+	_ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}) - 2*unsafe.Sizeof(uintptr(0))]byte{}
 )
 
 // InitializeFastIo initializes the Fast I/O shared memory section.
@@ -138,7 +143,7 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 	}
 
 	request := UnsortedReadSendRequest{
-		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
+		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
 
@@ -170,7 +175,7 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 	}
 
 	request := UnsortedReadSendRequest{
-		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
+		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
 
@@ -202,7 +207,7 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, pack
 	}
 
 	request := UnsortedReadSendRequest{
-		Packets:    (**IntermediateBuffer)(unsafe.Pointer(&packets[0])),
+		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
 
