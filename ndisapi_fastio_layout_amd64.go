@@ -4,7 +4,7 @@ package ndisapi
 
 import "unsafe"
 
-// Pin the on-the-wire size of UnsortedReadSendRequest on amd64: an 8-byte
+// Pin the in-memory struct size of UnsortedReadSendRequest on amd64: an 8-byte
 // PINTERMEDIATE_BUFFER* followed by a 4-byte DWORD plus 4 bytes of trailing
 // padding inserted by the C compiler to align the struct to pointer width.
 // This is checked at init time because go vet miscomputes unsafe.Sizeof for
