@@ -30,12 +30,6 @@ jobs:
         run: go mod tidy
 
       - name: Run tests
-        run: |
-          if ($env:GOARCH -eq "amd64") {
-            $env:GOARCH = "amd64"
-          } elseif ($env:GOARCH -eq "386") {
-            $env:GOARCH = "386"
-          } elseif ($env:GOARCH -eq "arm64") {
-            $env:GOARCH = "arm64"
-          }
-          go test -v ./...
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: go test -v ./...
