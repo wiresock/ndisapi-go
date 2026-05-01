@@ -1,4 +1,4 @@
-//go:build windows && amd64
+//go:build windows && amd64 && go1.19
 
 package ndisapi
 
@@ -11,5 +11,11 @@ import "unsafe"
 // the struct is already pointer-aligned with no trailing padding, so the
 // per-field offset/size assertions in ndisapi_fastio.go already cover every
 // byte of the struct and a separate total-size check is unnecessary.
+//
+// Gated on go1.19+ because Go 1.18's `vet` evaluates
+// `unsafe.Sizeof(StructLiteral{})` without including trailing struct padding
+// (returns 12 instead of 16 here) and then mis-folds the resulting subtraction
+// to a negative uintptr constant, which fails vet even though the actual
+// compiled binary lays the struct out correctly.
 var _ [0]byte = [unsafe.Sizeof(UnsortedReadSendRequest{}) - 16]byte{}
 
