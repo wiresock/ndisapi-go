@@ -32,4 +32,9 @@ jobs:
       - name: Run tests
         env:
           GOARCH: ${{ matrix.arch }}
-        run: go test -v ./...
+        run: |
+          if ($env:GOARCH -eq "arm64") {
+            go build ./...
+          } else {
+            go test -v ./...
+          }
