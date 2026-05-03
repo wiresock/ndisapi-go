@@ -29,13 +29,16 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
-      - name: Run tests
+      - name: Build (arm64 compile-only check)
+        if: ${{ matrix.arch == 'arm64' }}
+        env:
+          GOARCH: ${{ matrix.arch }}
         run: |
-          if ($env:GOARCH -eq "amd64") {
-            $env:GOARCH = "amd64"
-          } elseif ($env:GOARCH -eq "386") {
-            $env:GOARCH = "386"
-          } elseif ($env:GOARCH -eq "arm64") {
-            $env:GOARCH = "arm64"
-          }
-          go test -v ./...
+          go build ./...
+          go list ./... | ForEach-Object { go test -c -o NUL $_ }
+
+      - name: Run tests
+        if: ${{ matrix.arch != 'arm64' }}
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: go test -v ./...
