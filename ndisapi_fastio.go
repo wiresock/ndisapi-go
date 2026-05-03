@@ -78,6 +78,13 @@ type unsortedReadSendRequest struct {
 	PacketsNum uint32
 }
 
+// Deprecated: UnsortedReadSendRequest is an alias for the internal
+// unsortedReadSendRequest type, retained for backward compatibility.
+// The type's fields are tightly coupled to the driver's binary ABI and
+// are not intended to be part of the public API; this alias will be
+// removed in a future major release.
+type UnsortedReadSendRequest = unsortedReadSendRequest
+
 // Compile-time assertions that unsortedReadSendRequest matches the driver's
 // UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
 // reintroducing a slice header or otherwise changing the field layout. Each
