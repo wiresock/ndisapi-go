@@ -2,7 +2,10 @@
 
 package ndisapi
 
-import "unsafe"
+import (
+	"fmt"
+	"unsafe"
+)
 
 // Pin the in-memory struct size of unsortedReadSendRequest on amd64 as a
 // runtime init guard against accidental layout changes: an 8-byte
@@ -13,6 +16,6 @@ import "unsafe"
 func init() {
 	var _v unsortedReadSendRequest
 	if unsafe.Sizeof(_v) != 16 {
-		panic("unsortedReadSendRequest has unexpected amd64 size")
+		panic(fmt.Sprintf("unsortedReadSendRequest: unexpected amd64 size: got %d, want 16", unsafe.Sizeof(_v)))
 	}
 }
