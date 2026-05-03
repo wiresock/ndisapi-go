@@ -1,10 +1,10 @@
-//go:build windows && amd64
+//go:build windows && arm64
 
 package ndisapi
 
 import "unsafe"
 
-// Pin the in-memory struct size of unsortedReadSendRequest on amd64 as a
+// Pin the in-memory struct size of unsortedReadSendRequest on arm64 as a
 // runtime init guard against accidental layout changes: an 8-byte
 // PINTERMEDIATE_BUFFER* followed by a 4-byte DWORD plus 4 bytes of trailing
 // padding inserted by the C compiler to align the struct to pointer width.
@@ -13,6 +13,6 @@ import "unsafe"
 func init() {
 	var _v unsortedReadSendRequest
 	if unsafe.Sizeof(_v) != 16 {
-		panic("unsortedReadSendRequest has unexpected amd64 size")
+		panic("unsortedReadSendRequest has unexpected arm64 size")
 	}
 }

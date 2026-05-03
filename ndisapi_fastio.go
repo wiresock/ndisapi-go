@@ -64,29 +64,31 @@ type InitializeFastIOParams struct {
 	DataSize uint32
 }
 
-// UnsortedReadSendRequest represents a request for unsorted read/send packets.
-// The binary layout must match the driver's UNSORTED_READ_SEND_REQUEST structure
+// unsortedReadSendRequest is the internal ABI struct sent to the driver for
+// unsorted read/send operations. Its binary layout must match the driver's
+// UNSORTED_READ_SEND_REQUEST structure
 // (see https://github.com/wiresock/ndisapi/blob/master/include/Common.h):
 //
 //	typedef struct _UNSORTED_READ_SEND_REQUEST {
 //	    PINTERMEDIATE_BUFFER* packets;
 //	    DWORD                 packets_num;
 //	} UNSORTED_READ_SEND_REQUEST;
-type UnsortedReadSendRequest struct {
+type unsortedReadSendRequest struct {
 	Packets    **IntermediateBuffer
 	PacketsNum uint32
 }
 
-// Compile-time assertions that UnsortedReadSendRequest matches the driver's
+// Compile-time assertions that unsortedReadSendRequest matches the driver's
 // UNSORTED_READ_SEND_REQUEST binary layout. These guard against accidentally
 // reintroducing a slice header or otherwise changing the field layout. Each
 // declaration assigns a fixed-length array literal to a same-length array
 // variable: if the lengths differ the types are incompatible and the
 // assignment fails to compile. The total struct size is additionally pinned
-// on windows/amd64 in ndisapi_fastio_layout_amd64.go (where the C compiler
-// adds 4 bytes of trailing padding); on x86 the per-field offset/size checks
-// already cover every byte because the struct has no trailing padding.
-var _unsortedReadSendRequestLayout UnsortedReadSendRequest
+// on windows/amd64 and windows/arm64 in the respective layout files (where
+// the C compiler adds 4 bytes of trailing padding to align the struct to
+// pointer width); on x86 the per-field offset/size checks already cover
+// every byte because the struct has no trailing padding.
+var _unsortedReadSendRequestLayout unsortedReadSendRequest
 
 var (
 	_ [0]byte                    = [unsafe.Offsetof(_unsortedReadSendRequestLayout.Packets)]byte{}
@@ -148,7 +150,7 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		return false
 	}
 
-	request := UnsortedReadSendRequest{
+	request := unsortedReadSendRequest{
 		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
@@ -189,7 +191,7 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 		return false
 	}
 
-	request := UnsortedReadSendRequest{
+	request := unsortedReadSendRequest{
 		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
@@ -228,7 +230,7 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, pack
 		return false
 	}
 
-	request := UnsortedReadSendRequest{
+	request := unsortedReadSendRequest{
 		Packets:    &packets[0],
 		PacketsNum: packetsNum,
 	}
