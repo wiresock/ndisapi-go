@@ -91,10 +91,10 @@ type unsortedReadSendRequest struct {
 var _unsortedReadSendRequestLayout unsortedReadSendRequest
 
 var (
-	_ [0]byte                    = [unsafe.Offsetof(_unsortedReadSendRequestLayout.Packets)]byte{}
+	_ [0]byte                         = [unsafe.Offsetof(_unsortedReadSendRequestLayout.Packets)]byte{}
 	_ [unsafe.Sizeof(uintptr(0))]byte = [unsafe.Sizeof(_unsortedReadSendRequestLayout.Packets)]byte{}
 	_ [unsafe.Sizeof(uintptr(0))]byte = [unsafe.Offsetof(_unsortedReadSendRequestLayout.PacketsNum)]byte{}
-	_ [4]byte                    = [unsafe.Sizeof(_unsortedReadSendRequestLayout.PacketsNum)]byte{}
+	_ [4]byte                         = [unsafe.Sizeof(_unsortedReadSendRequestLayout.PacketsNum)]byte{}
 )
 
 // InitializeFastIo initializes the Fast I/O shared memory section.
