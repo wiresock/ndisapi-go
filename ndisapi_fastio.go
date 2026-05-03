@@ -145,7 +145,7 @@ func (a *NdisApi) ReadPacketsUnsorted(packets []*IntermediateBuffer, packetsNum 
 		*packetsSuccess = 0
 		return true
 	}
-	if uint32(len(packets)) < packetsNum {
+	if uint64(len(packets)) < uint64(packetsNum) {
 		*packetsSuccess = 0
 		return false
 	}
@@ -186,7 +186,7 @@ func (a *NdisApi) SendPacketsToAdaptersUnsorted(packets []*IntermediateBuffer, p
 		*packetSuccess = 0
 		return true
 	}
-	if uint32(len(packets)) < packetsNum {
+	if uint64(len(packets)) < uint64(packetsNum) {
 		*packetSuccess = 0
 		return false
 	}
@@ -225,7 +225,7 @@ func (a *NdisApi) SendPacketsToMstcpUnsorted(packets []*IntermediateBuffer, pack
 		*packetSuccess = 0
 		return true
 	}
-	if uint32(len(packets)) < packetsNum {
+	if uint64(len(packets)) < uint64(packetsNum) {
 		*packetSuccess = 0
 		return false
 	}
