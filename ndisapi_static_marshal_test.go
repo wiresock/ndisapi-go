@@ -69,6 +69,41 @@ func TestMarshalStaticFilterTable(t *testing.T) {
 	}
 }
 
+// TestMarshalStaticFilterTableLengthIsSourceOfTruth verifies that the slice length - not the
+// caller-supplied TableSize field - determines how many filters are marshaled, so a stale or
+// wrong TableSize can never produce a header count that disagrees with the filter data.
+func TestMarshalStaticFilterTableLengthIsSourceOfTruth(t *testing.T) {
+	table := &StaticFilterTable{
+		TableSize: 5, // deliberately wrong - only 2 filters actually present
+		StaticFilters: []StaticFilter{
+			{Adapter: Handle{1, 0, 0, 0, 0, 0, 0, 0}, FilterAction: 0x2000},
+			{Adapter: Handle{2, 0, 0, 0, 0, 0, 0, 0}, FilterAction: 0x2001},
+		},
+	}
+
+	buf := marshalStaticFilterTable(table)
+
+	// Header count must reflect the slice length (2), not the bogus TableSize (5).
+	if got := *(*uint32)(unsafe.Pointer(&buf[0])); got != 2 {
+		t.Fatalf("header TableSize = %d, want 2 (slice length)", got)
+	}
+
+	// Buffer must be sized for 2 filters, not 5.
+	wantSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) + (2-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
+	if len(buf) != wantSize {
+		t.Fatalf("buffer size = %d, want %d (2 filters)", len(buf), wantSize)
+	}
+
+	// The two real filters must still be laid out correctly after the header.
+	for i := 0; i < 2; i++ {
+		offset := int(staticFilterTableHeaderSize) + i*int(unsafe.Sizeof(StaticFilter{}))
+		got := *(*StaticFilter)(unsafe.Pointer(&buf[offset]))
+		if got != table.StaticFilters[i] {
+			t.Errorf("filter[%d] mismatch:\n got = %+v\nwant = %+v", i, got, table.StaticFilters[i])
+		}
+	}
+}
+
 // TestMarshalStaticFilterTableEmpty ensures a zero-filter table marshals to just the 8-byte
 // header without panicking.
 func TestMarshalStaticFilterTableEmpty(t *testing.T) {

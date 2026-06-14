@@ -517,6 +517,9 @@ type StaticFilterWithPosition struct {
 // first STATIC_FILTER (garbage). We therefore marshal the table into a contiguous buffer
 // laid out as [TableSize][Padding][filter0][filter1]... with the filters starting at
 // offset 8 - mirroring exactly how GetPacketFilterTable reads it back.
+//
+// The number of filters sent is taken from len(packet.StaticFilters); packet.TableSize is
+// ignored on send, so the header count and the filter data can never disagree.
 func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 	if packet == nil {
 		return a.DeviceIoControl(
@@ -549,7 +552,10 @@ func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
 // GetPacketFilterTable and is kept as a standalone function so it can be unit-tested without
 // a live driver.
 func marshalStaticFilterTable(packet *StaticFilterTable) []byte {
-	tableSize := packet.TableSize
+	// The slice length is the single source of truth for the number of filters, so the count
+	// written into the header can never disagree with the filter data that follows it.
+	// packet.TableSize is intentionally ignored to rule out that silent mismatch.
+	tableSize := uint32(len(packet.StaticFilters))
 	bufferSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) + (int(tableSize)-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
 	tableBuffer := make([]byte, bufferSize)
 
@@ -557,7 +563,7 @@ func marshalStaticFilterTable(packet *StaticFilterTable) []byte {
 	*(*uint32)(unsafe.Pointer(&tableBuffer[0])) = tableSize
 
 	// Filters laid out contiguously starting right after the header.
-	for i := 0; i < int(tableSize) && i < len(packet.StaticFilters); i++ {
+	for i := 0; i < int(tableSize); i++ {
 		offset := int(staticFilterTableHeaderSize) + i*int(unsafe.Sizeof(StaticFilter{}))
 		*(*StaticFilter)(unsafe.Pointer(&tableBuffer[offset])) = packet.StaticFilters[i]
 	}
