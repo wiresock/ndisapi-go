@@ -4,7 +4,6 @@ package driver
 
 import (
 	"fmt"
-	"unsafe"
 
 	A "github.com/wiresock/ndisapi-go"
 )
@@ -121,19 +120,22 @@ func (f *StaticFilters) Contains(filter *Filter) bool {
 }
 
 // StoreTable stores the current filter table to the driver.
+//
+// The table is built with a properly allocated StaticFilters slice and handed to
+// SetPacketFilterTable, which marshals it into the contiguous layout the driver expects.
+// (The previous implementation overlaid *StaticFilterTable on a zeroed []byte and wrote
+// through the resulting nil slice header, which panics with index-out-of-range as soon as
+// any filter is present.)
 func (f *StaticFilters) StoreTable() error {
 	filterSize := len(f.Filters)
-	tableBuffer := make([]byte, int(unsafe.Sizeof(A.StaticFilterTable{}))+(filterSize)*int(unsafe.Sizeof(A.StaticFilter{})))
-	table := (*A.StaticFilterTable)(unsafe.Pointer(&tableBuffer[0]))
 
-	for i := range tableBuffer {
-		tableBuffer[i] = 0
+	table := &A.StaticFilterTable{
+		TableSize:     uint32(filterSize),
+		StaticFilters: make([]A.StaticFilter, filterSize),
 	}
 
-	table.TableSize = uint32(filterSize)
-
-	for i, filter := range f.Filters {
-		table.StaticFilters[i] = *f.toStaticFilter(&filter)
+	for i := range f.Filters {
+		table.StaticFilters[i] = *f.toStaticFilter(&f.Filters[i])
 	}
 
 	if err := f.SetPacketFilterTable(table); err != nil {
