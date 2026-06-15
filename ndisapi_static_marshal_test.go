@@ -25,7 +25,7 @@ func TestMarshalStaticFilterTable(t *testing.T) {
 			DirectionFlags: uint32(0x1000 + i),
 			FilterAction:   uint32(0x2000 + i),
 			ValidFields:    uint32(0x3000 + i),
-			PacketsIn:      uint64(0xAAAA0000 + i),
+			PacketsIn:      uint64(0xAAAA0000) + uint64(i),
 		}
 	}
 
@@ -38,7 +38,7 @@ func TestMarshalStaticFilterTable(t *testing.T) {
 	buf := marshalStaticFilterTable(table)
 
 	// Buffer size must match the formula used by GetPacketFilterTable.
-	wantSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) + (n-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
+	wantSize := int(staticFilterTableHeaderSize) + n*int(unsafe.Sizeof(StaticFilter{}))
 	if len(buf) != wantSize {
 		t.Fatalf("buffer size = %d, want %d", len(buf), wantSize)
 	}
@@ -89,7 +89,7 @@ func TestMarshalStaticFilterTableLengthIsSourceOfTruth(t *testing.T) {
 	}
 
 	// Buffer must be sized for 2 filters, not 5.
-	wantSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) + (2-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
+	wantSize := int(staticFilterTableHeaderSize) + 2*int(unsafe.Sizeof(StaticFilter{}))
 	if len(buf) != wantSize {
 		t.Fatalf("buffer size = %d, want %d (2 filters)", len(buf), wantSize)
 	}
@@ -110,7 +110,7 @@ func TestMarshalStaticFilterTableEmpty(t *testing.T) {
 	table := &StaticFilterTable{TableSize: 0, StaticFilters: nil}
 	buf := marshalStaticFilterTable(table)
 
-	wantSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) - AnySize*int(unsafe.Sizeof(StaticFilter{}))
+	wantSize := int(staticFilterTableHeaderSize)
 	if len(buf) != wantSize {
 		t.Fatalf("empty buffer size = %d, want %d", len(buf), wantSize)
 	}

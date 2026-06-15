@@ -556,7 +556,7 @@ func marshalStaticFilterTable(packet *StaticFilterTable) []byte {
 	// written into the header can never disagree with the filter data that follows it.
 	// packet.TableSize is intentionally ignored to rule out that silent mismatch.
 	tableSize := uint32(len(packet.StaticFilters))
-	bufferSize := int(unsafe.Sizeof(InitialStaticFilterTable{})) + (int(tableSize)-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
+	bufferSize := int(staticFilterTableHeaderSize) + int(tableSize)*int(unsafe.Sizeof(StaticFilter{}))
 	tableBuffer := make([]byte, bufferSize)
 
 	// Header: TableSize at offset 0, Padding at offset 4 (left zero).
