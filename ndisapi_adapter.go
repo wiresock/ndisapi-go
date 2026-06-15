@@ -104,11 +104,11 @@ func (a *NdisApi) FlushAdapterPacketQueue(adapter Handle) error {
 // GetAdapterPacketQueueSize retrieves the size of the packet queue for the specified network adapter.
 func (a *NdisApi) GetAdapterPacketQueueSize(adapter Handle, size *uint32) error {
 	return a.DeviceIoControl(
-		IOCTL_NDISRD_GET_VERSION,
+		IOCTL_NDISRD_ADAPTER_QUEUE_SIZE,
 		unsafe.Pointer(&adapter),
 		uint32(len(adapter)),
-		unsafe.Pointer(&size),
-		uint32(unsafe.Sizeof(size)),
+		unsafe.Pointer(size),
+		uint32(unsafe.Sizeof(*size)),
 		nil,
 		nil,
 	)
