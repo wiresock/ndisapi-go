@@ -491,6 +491,11 @@ type InitialStaticFilterTable struct {
 	StaticFilters [AnySize]StaticFilter
 }
 
+// staticFilterTableHeaderSize is the byte offset at which the contiguous STATIC_FILTER array
+// begins (past TableSize + Padding). Both the read path (GetPacketFilterTable) and the write
+// path (marshalStaticFilterTable) key off this so the layout cannot drift if the header changes.
+const staticFilterTableHeaderSize = unsafe.Offsetof(InitialStaticFilterTable{}.StaticFilters)
+
 // StaticFilterTable represents a table of static filters
 type StaticFilterTable struct {
 	TableSize     uint32
@@ -500,26 +505,70 @@ type StaticFilterTable struct {
 
 // StaticFilterWithPosition represents a static filter with a specific insertion position.
 type StaticFilterWithPosition struct {
-	Position     uint32
+	Position      uint32
 	StaticFilters StaticFilter
 }
 
 // SetPacketFilterTable sets the static packet filter table for the Windows Packet Filter driver.
+//
+// StaticFilterTable.StaticFilters is a Go slice, so its in-memory layout is a 24-byte
+// slice header (ptr/len/cap), not the contiguous STATIC_FILTER array the driver expects.
+// Passing unsafe.Pointer(packet) directly makes the driver read that slice header as the
+// first STATIC_FILTER (garbage). We therefore marshal the table into a contiguous buffer
+// laid out as [TableSize][Padding][filter0][filter1]... with the filters starting at
+// offset 8 - mirroring exactly how GetPacketFilterTable reads it back.
+//
+// The number of filters sent is taken from len(packet.StaticFilters); packet.TableSize is
+// ignored on send, so the header count and the filter data can never disagree.
 func (a *NdisApi) SetPacketFilterTable(packet *StaticFilterTable) error {
-	var size uint32 = 0
-	if packet != nil {
-		size = uint32(unsafe.Sizeof(InitialStaticFilterTable{})) + (packet.TableSize-1)*uint32(unsafe.Sizeof(StaticFilter{}))
+	if packet == nil {
+		return a.DeviceIoControl(
+			IOCTL_NDISRD_SET_PACKET_FILTERS,
+			nil,
+			0,
+			nil,
+			0,
+			&a.bytesReturned,
+			nil,
+		)
 	}
+
+	tableBuffer := marshalStaticFilterTable(packet)
 
 	return a.DeviceIoControl(
 		IOCTL_NDISRD_SET_PACKET_FILTERS,
-		unsafe.Pointer(packet),
-		size,
+		unsafe.Pointer(&tableBuffer[0]),
+		uint32(len(tableBuffer)),
 		nil,
 		0,
 		&a.bytesReturned,
 		nil,
 	)
+}
+
+// marshalStaticFilterTable serializes a StaticFilterTable into the contiguous byte layout
+// expected by the driver: [TableSize uint32][Padding uint32][filter0][filter1]... with the
+// STATIC_FILTER array starting at offset 8. This is the exact inverse of the read path in
+// GetPacketFilterTable and is kept as a standalone function so it can be unit-tested without
+// a live driver.
+func marshalStaticFilterTable(packet *StaticFilterTable) []byte {
+	// The slice length is the single source of truth for the number of filters, so the count
+	// written into the header can never disagree with the filter data that follows it.
+	// packet.TableSize is intentionally ignored to rule out that silent mismatch.
+	tableSize := uint32(len(packet.StaticFilters))
+	bufferSize := int(staticFilterTableHeaderSize) + int(tableSize)*int(unsafe.Sizeof(StaticFilter{}))
+	tableBuffer := make([]byte, bufferSize)
+
+	// Header: TableSize at offset 0, Padding at offset 4 (left zero).
+	*(*uint32)(unsafe.Pointer(&tableBuffer[0])) = tableSize
+
+	// Filters laid out contiguously starting right after the header.
+	for i := 0; i < int(tableSize); i++ {
+		offset := int(staticFilterTableHeaderSize) + i*int(unsafe.Sizeof(StaticFilter{}))
+		*(*StaticFilter)(unsafe.Pointer(&tableBuffer[offset])) = packet.StaticFilters[i]
+	}
+
+	return tableBuffer
 }
 
 // AddStaticFilterFront adds a static filter to the front of the filter list in the Windows Packet Filter driver.
@@ -551,7 +600,7 @@ func (a *NdisApi) AddStaticFilterBack(filter *StaticFilter) error {
 // InsertStaticFilter inserts a static filter at a specified position in the filter chain.
 func (a *NdisApi) InsertStaticFilter(filter *StaticFilter, position uint32) error {
 	staticFilter := StaticFilterWithPosition{
-		Position:     position,
+		Position:      position,
 		StaticFilters: *filter,
 	}
 	return a.DeviceIoControl(
@@ -638,7 +687,7 @@ func (a *NdisApi) GetPacketFilterTable(tableSize uint32) (*StaticFilterTable, er
 	}
 
 	for i := 0; i < int(tableSize); i++ {
-		offset := 8 + i*int(unsafe.Sizeof(StaticFilter{}))
+		offset := int(staticFilterTableHeaderSize) + i*int(unsafe.Sizeof(StaticFilter{}))
 		filterList.StaticFilters[i] = *(*StaticFilter)(unsafe.Pointer(&tableBuffer[offset]))
 	}
 
