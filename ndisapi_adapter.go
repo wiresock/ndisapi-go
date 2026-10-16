@@ -78,7 +78,7 @@ func (a *NdisApi) SetAdapterMode(currentMode *AdapterMode) error {
 // GetAdapterMode retrieves the filter mode of the network adapter.
 func (a *NdisApi) GetAdapterMode(currentMode *AdapterMode) error {
 	return a.DeviceIoControl(
-		IOCTL_NDISRD_SET_ADAPTER_MODE,
+		IOCTL_NDISRD_GET_ADAPTER_MODE,
 		unsafe.Pointer(currentMode),
 		uint32(unsafe.Sizeof(AdapterMode{})),
 		unsafe.Pointer(currentMode),

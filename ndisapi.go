@@ -34,6 +34,8 @@ const (
 
 var _ NdisApiInterface = (*NdisApi)(nil)
 
+var deviceIoControl = windows.DeviceIoControl
+
 // NdisApi represents the NDISAPI driver interface.
 type NdisApi struct {
 	overlapped     windows.Overlapped
@@ -112,7 +114,7 @@ func (a *NdisApi) DeviceIoControl(service uint32, in unsafe.Pointer, sizeIn uint
 		SizeRet = &returnedBytes
 	}
 
-	return windows.DeviceIoControl(
+	return deviceIoControl(
 		a.fileHandle,
 		service,
 		(*byte)(in),
