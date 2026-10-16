@@ -4,6 +4,7 @@ package ndisapi
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"strings"
 	"syscall"
@@ -650,12 +651,15 @@ func (a *NdisApi) GetPacketFilterTableSize() (uint32, error) {
 		0,
 		unsafe.Pointer(&tableSize),
 		uint32(unsafe.Sizeof(tableSize)),
-		nil,
+		&a.bytesReturned,
 		nil,
 	)
 
 	if err != nil {
 		return 0, err
+	}
+	if a.bytesReturned != uint32(unsafe.Sizeof(tableSize)) {
+		return 0, fmt.Errorf("invalid static filter table size byte count: %d", a.bytesReturned)
 	}
 
 	return tableSize, nil
@@ -663,12 +667,23 @@ func (a *NdisApi) GetPacketFilterTableSize() (uint32, error) {
 
 // GetPacketFilterTable retrieves the static packet filter table from the Windows Packet Filter driver.
 func (a *NdisApi) GetPacketFilterTable(tableSize uint32) (*StaticFilterTable, error) {
-	// Allocate memory for the filter table
-	var bufferSize int = int(unsafe.Sizeof(InitialStaticFilterTable{})) + (int(tableSize)-AnySize)*int(unsafe.Sizeof(StaticFilter{}))
-	tableBuffer := make([]byte, bufferSize)
+	return a.getPacketFilterTable(tableSize, IOCTL_NDISRD_GET_PACKET_FILTERS)
+}
+
+// getPacketFilterTable keeps the native inline array separate from the Go slice
+// header, and validates the returned table before reading any filter entries.
+func (a *NdisApi) getPacketFilterTable(capacity, controlCode uint32) (*StaticFilterTable, error) {
+	headerSize := uint64(staticFilterTableHeaderSize)
+	filterSize := uint64(unsafe.Sizeof(StaticFilter{}))
+	bufferSize := headerSize + uint64(capacity)*filterSize
+	if bufferSize > uint64(^uint32(0)) || bufferSize > uint64(^uint(0)>>1) {
+		return nil, fmt.Errorf("static filter table capacity %d exceeds buffer size limits", capacity)
+	}
+	tableBuffer := make([]byte, int(bufferSize))
+	binary.LittleEndian.PutUint32(tableBuffer, capacity)
 
 	err := a.DeviceIoControl(
-		IOCTL_NDISRD_GET_PACKET_FILTERS,
+		controlCode,
 		nil,
 		0,
 		unsafe.Pointer(&tableBuffer[0]),
@@ -679,10 +694,17 @@ func (a *NdisApi) GetPacketFilterTable(tableSize uint32) (*StaticFilterTable, er
 	if err != nil {
 		return nil, err
 	}
+	if uint64(a.bytesReturned) < headerSize || uint64(a.bytesReturned) > bufferSize {
+		return nil, fmt.Errorf("invalid static filter table byte count: %d", a.bytesReturned)
+	}
+	tableSize := binary.LittleEndian.Uint32(tableBuffer)
+	if tableSize > capacity || headerSize+uint64(tableSize)*filterSize > uint64(a.bytesReturned) {
+		return nil, fmt.Errorf("static filter table count %d exceeds returned buffer", tableSize)
+	}
 
 	filterList := &StaticFilterTable{
 		TableSize:     tableSize,
-		Padding:       0,
+		Padding:       binary.LittleEndian.Uint32(tableBuffer[4:]),
 		StaticFilters: make([]StaticFilter, tableSize),
 	}
 
@@ -696,22 +718,11 @@ func (a *NdisApi) GetPacketFilterTable(tableSize uint32) (*StaticFilterTable, er
 
 // GetPacketFilterTableResetStats retrieves the static packet filter table and resets statistics for the Windows Packet Filter driver.
 func (a *NdisApi) GetPacketFilterTableResetStats() (*StaticFilterTable, error) {
-	var staticFilterTable StaticFilterTable
-
-	err := a.DeviceIoControl(
-		IOCTL_NDISRD_GET_PACKET_FILTERS_RESET_STATS,
-		nil,
-		0,
-		unsafe.Pointer(&staticFilterTable),
-		uint32(unsafe.Sizeof(StaticFilterTable{}))+(staticFilterTable.TableSize-AnySize)*uint32(unsafe.Sizeof(StaticFilter{})),
-		&a.bytesReturned,
-		nil,
-	)
+	tableSize, err := a.GetPacketFilterTableSize()
 	if err != nil {
 		return nil, err
 	}
-
-	return &staticFilterTable, nil
+	return a.getPacketFilterTable(tableSize, IOCTL_NDISRD_GET_PACKET_FILTERS_RESET_STATS)
 }
 
 // SetPacketFilterCacheState sets the state of the packet filter cache.
@@ -770,15 +781,6 @@ func (a *NdisApi) EnablePacketFragmentCache() error {
 // DisablePacketFragmentCache disables the packet fragment cache.
 func (a *NdisApi) DisablePacketFragmentCache() error {
 	return a.SetPacketFragmentCacheState(false)
-}
-
-// IsNdiswanInterfaces checks if the given adapter is an NDISWAN interface.
-func (a *NdisApi) IsNdiswanInterfaces(adapterName, ndiswanName string) bool {
-	isNdiswanInterface := false
-
-	// TODO:
-
-	return isNdiswanInterface
 }
 
 // IsNdiswanIP checks if the given adapter is an NDISWANIP interface.
